@@ -2,6 +2,124 @@ LatticeFlow — EDM Lattice Circularity Predictor
 
 LIVE DEPLOYMENT AT ------https://lattice-project.onrender.com/
 
+# 📸 Application Screenshots
+
+## 🏠 Main Dashboard
+
+![Dashboard](assets/Screenshot%202026-07-04%20164928.png)
+
+---
+
+## 📊 Circularity Analysis
+
+![Circularity Analysis](assets/Screenshot%202026-07-04%20165207.png)
+
+---
+
+## 📈 Geometry Visualization
+
+![Geometry Visualization](assets/Screenshot%202026-07-04%20165252.png)
+
+---
+
+## 🎯 Pore Detection
+
+![Pore Detection](assets/Screenshot%202026-07-04%20165310.png)
+
+---
+
+## 📐 Circularity Measurement
+
+![Circularity Measurement](assets/Screenshot%202026-07-04%20165350.png)
+
+---
+
+## 📑 Final Analysis Report
+
+![Final Report](assets/Screenshot%202026-07-04%20165446.png)
+
+---
+
+# 🏗️ System Architecture
+
+```text
+             Input Lattice Structure
+                       │
+                       ▼
+             Image Processing Module
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+ Edge Detection   Contour Detection  Feature Extraction
+        │              │              │
+        └──────────────┼──────────────┘
+                       ▼
+            Circularity Analysis Engine
+                       │
+                       ▼
+        Statistics • Visualization • Reports
+```
+
+---
+
+# 🚀 Key Capabilities
+
+- Analyze lattice pore geometry
+- Detect non-circular structures
+- Measure pore circularity
+- Generate engineering reports
+- Visualize lattice quality
+- Improve additive manufacturing accuracy
+- Assist biomedical implant design
+
+---
+
+# 📂 Project Structure
+
+```text
+Lattice-Circularity-Analyzer
+│
+├── assets
+├── dataset
+├── models
+├── src
+├── results
+├── README.md
+├── requirements.txt
+└── main.py
+```
+
+---
+
+# ⚙️ Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/shekharaj0007/Lattice-Circularity-Analyzer.git
+```
+
+Navigate into the project
+
+```bash
+cd Lattice-Circularity-Analyzer
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the application
+
+```bash
+python main.py
+```
+
+---
+
+
 
 Predict the circularity of EDM-machined holes in metallic lattice structures using Machine Learning, Gaussian Process Regression, and geometric analysis.
 
