@@ -1,12 +1,12 @@
-const raw = sessionStorage.getItem("latticeReport");
-const body = document.getElementById("report-body");
-const meta = document.getElementById("report-meta");
-const headerVerdict = document.getElementById("header-verdict");
+function renderReport(r, image) {
+  const body = document.getElementById("report-body");
+  const meta = document.getElementById("report-meta");
+  const headerVerdict = document.getElementById("header-verdict");
+  if (!r || !r.summary) {
+    body.innerHTML = "<p class='loading'>Report data is incomplete. Run <strong>Analyze</strong> again on the main page.</p>";
+    return;
+  }
 
-if (!raw) {
-  body.innerHTML = "<p class='loading'>No report data. Run an analysis on the main page, then click <strong>Please click here for the detailed report</strong>.</p>";
-} else {
-  const { report: r, image } = JSON.parse(raw);
   const pass = r.summary.overall === "PASS";
   meta.textContent = `Generated ${new Date().toLocaleString()} · Circularity ${r.summary.circularity_1to5}/5 · Ratio ${r.summary.circularity_ratio}`;
   headerVerdict.className = `header-verdict ${pass ? "pass" : "fail"}`;
@@ -16,8 +16,8 @@ if (!raw) {
 
   const sec = (title, html) => `<div class="section"><h2>${title}</h2>${html}</div>`;
   const m = r.mathematics || {};
-  const g = r.geometry_analysis;
-  const u = r.user_inputs;
+  const g = r.geometry_analysis || {};
+  const u = r.user_inputs || {};
 
   body.innerHTML = [
     sec("1. Executive Summary", `
@@ -64,12 +64,15 @@ if (!raw) {
         <tr><td>Peak current</td><td><strong>${u.peak_current_A} A</strong></td></tr>
         <tr><td>Pulse-on time</td><td><strong>${u.pulse_on_us} µs</strong></td></tr>
         <tr><td>Duty factor</td><td><strong>${u.duty_pct} %</strong></td></tr>
-        <tr><td>Tool diameter (user selected)</td><td><strong>${u.tool_diameter_um} µm</strong></td></tr>
+        <tr><td>Tool shape</td><td><strong>${u.tool_shape || "circle"}</strong></td></tr>
+        <tr><td>Tool circumdiameter</td><td><strong>${u.tool_diameter_um} µm</strong></td></tr>
+        ${u.tool_sides ? `<tr><td>Area-equivalent diameter</td><td><strong>${u.equivalent_area_diameter_um} µm</strong></td></tr>
+        <tr><td>Inscribed diameter</td><td><strong>${u.inscribed_diameter_um} µm</strong></td></tr>` : ""}
         <tr><td>Pore diameter (user entered)</td><td><strong>${u.pore_diameter_um} µm</strong></td></tr>
         <tr><td>Working area (user entered)</td><td><strong>${u.working_area_um} × ${u.working_area_um} µm</strong></td></tr>
         <tr><td>Tool center position</td><td><strong>(${u.tool_x_um}, ${u.tool_y_um}) µm</strong></td></tr>
-        <tr><td>Valid X range</td><td>${u.valid_x_range[0]} – ${u.valid_x_range[1]} µm</td></tr>
-        <tr><td>Valid Y range</td><td>${u.valid_y_range[0]} – ${u.valid_y_range[1]} µm</td></tr>
+        <tr><td>Valid X range</td><td>${(u.valid_x_range || ["—","—"]).join(" – ")} µm</td></tr>
+        <tr><td>Valid Y range</td><td>${(u.valid_y_range || ["—","—"]).join(" – ")} µm</td></tr>
       </table>
     `),
 
@@ -130,54 +133,55 @@ if (!raw) {
 
     sec("5. Mathematics & geometry", `
       <h3>Why position range changes with tool size</h3>
-      <p>${g.why_position_range}</p>
+      <p>${g.why_position_range || ""}</p>
       <div class="formula-block">
         ${m.position_bounds_formula || "x_valid ∈ [R, W − R]"}<br/>
-        R = tool_diameter / 2 = ${u.tool_diameter_um / 2} µm<br/>
+        R = circumdiameter / 2 = ${(u.tool_diameter_um || 0) / 2} µm<br/>
         W = working_area = ${u.working_area_um} µm<br/>
-        Valid range = [${u.valid_x_range[0]}, ${u.valid_x_range[1]}] µm
+        Valid range = [${(u.valid_x_range || ["—","—"]).join(", ")}] µm
+        ${u.tool_sides ? `<br/>Area-equivalent Ø = ${u.equivalent_area_diameter_um} µm (${m.equivalent_area_diameter_formula || "n-gon formula"})` : ""}
       </div>
       <h3>Key ratios & derived EDM quantities</h3>
       <div class="formula-block">
         Tool / pore ratio = ${g.tool_pore_ratio}  (${m.tool_pore_ratio_formula || "tool / pore"})<br/>
-        Discharge energy proxy = ${r.derived_edm.discharge_energy_proxy}  (${m.discharge_energy_formula || "I×T×D/100"})<br/>
-        Pulse-off time = ${r.derived_edm.pulse_off_us} µs  (${m.pulse_off_formula || "T×(100−D)/D"})<br/>
+        Discharge energy proxy = ${(r.derived_edm || {}).discharge_energy_proxy}  (${m.discharge_energy_formula || "I×T×D/100"})<br/>
+        Pulse-off time = ${(r.derived_edm || {}).pulse_off_us} µs  (${m.pulse_off_formula || "T×(100−D)/D"})<br/>
         Circularity ratio = ${r.summary.circularity_ratio}  (${m.circularity_ratio_formula || "score/5"})
       </div>
       <table>
         <tr><td>Unit cell (derived)</td><td>${g.unit_cell_um} µm</td></tr>
         <tr><td>Min distance to supporting strut</td><td>${g.min_dist_to_strut_um} µm</td></tr>
         <tr><td>Min distance to node center</td><td>${g.min_dist_to_node_um} µm</td></tr>
-        <tr><td>Nodes inside tool circle</td><td>${g.nodes_inside_tool}</td></tr>
+        <tr><td>Nodes inside tool footprint</td><td>${g.nodes_inside_tool}</td></tr>
         <tr><td>Strut length inside tool</td><td>${g.strut_intersection_um} µm</td></tr>
         <tr><td>Pore overlap fraction</td><td>${g.pore_overlap_fraction}</td></tr>
         <tr><td>Geometry risk index</td><td>${g.geometry_risk}</td></tr>
       </table>
-      <p style="font-size:0.88rem;color:#64748b;margin-top:0.75rem">Geometry risk combines strut proximity, strut intersection length inside the tool circle, and tool/pore size ratio. When tool diameter exceeds pore size (ratio > 1), the tool necessarily engages nodes and struts — gentle EDM settings are critical.</p>
+      <p style="font-size:0.88rem;color:#64748b;margin-top:0.75rem">Geometry risk combines strut proximity, strut intersection length inside the tool footprint, and tool/pore size ratio. When tool size exceeds pore size (ratio > 1), the tool necessarily engages nodes and struts — gentle EDM settings are critical.</p>
     `),
 
     sec("6. Decision logic (step-by-step)", `
-      <ol class="decision-list">${(r.decision_tree || []).map(s => `<li>${s.replace(/^Step \\d+: /, "")}</li>`).join("")}</ol>
+      <ol class="decision-list">${(r.decision_tree || []).map(s => `<li>${String(s).replace(/^Step [0-9]+:\\s*/, "")}</li>`).join("")}</ol>
     `),
 
     sec("7. Circularity analysis — detailed reasons", `
       <h3>Factors supporting circularity</h3>
-      <ul class="reasons pass">${r.circularity_explanation.reasons_pass.map(x => `<li>${x}</li>`).join("") || "<li>None identified</li>"}</ul>
+      <ul class="reasons pass">${(r.circularity_explanation?.reasons_pass || []).map(x => `<li>${x}</li>`).join("") || "<li>None identified</li>"}</ul>
       <h3>Factors reducing circularity</h3>
-      <ul class="reasons fail">${r.circularity_explanation.reasons_fail.map(x => `<li>${x}</li>`).join("") || "<li>None identified</li>"}</ul>
+      <ul class="reasons fail">${(r.circularity_explanation?.reasons_fail || []).map(x => `<li>${x}</li>`).join("") || "<li>None identified</li>"}</ul>
     `),
 
     sec("8. Supporting material — why PASS or FAIL", `
-      <p><strong>Verdict: ${r.supporting_explanation.verdict}</strong></p>
+      <p><strong>Verdict: ${(r.supporting_explanation || {}).verdict || "—"}</strong></p>
       <p style="margin:0.75rem 0;font-size:0.9rem">The black supporting material must form a <em>continuous, nearly circular ring</em> around the machined pore. Nodes (red circles) may be cut or destroyed — that is acceptable per project specification.</p>
       <h3>Why supporting material PASSES</h3>
-      <ul class="reasons pass">${r.supporting_explanation.reasons_pass.map(x => `<li>${x}</li>`).join("") || "<li>No pass factors identified</li>"}</ul>
+      <ul class="reasons pass">${(r.supporting_explanation?.reasons_pass || []).map(x => `<li>${x}</li>`).join("") || "<li>No pass factors identified</li>"}</ul>
       <h3>Why supporting material FAILS</h3>
-      <ul class="reasons fail">${r.supporting_explanation.reasons_fail.map(x => `<li>${x}</li>`).join("") || "<li>No failure factors identified</li>"}</ul>
+      <ul class="reasons fail">${(r.supporting_explanation?.reasons_fail || []).map(x => `<li>${x}</li>`).join("") || "<li>No failure factors identified</li>"}</ul>
     `),
 
     sec("9. Theory, project context & ML notes", `
-      <div class="theory"><ul>${r.theory_notes.map(n => `<li>${n}</li>`).join("")}</ul></div>
+      <div class="theory"><ul>${(r.theory_notes || []).map(n => `<li>${n}</li>`).join("")}</ul></div>
       <p style="margin-top:1rem;font-size:0.88rem;color:#64748b">
         <strong>Phase 1</strong> (unknown position): find robust EDM settings for any landing point.<br/>
         <strong>Phase 2</strong> (known x,y): map circularity across the working area grid.<br/>
@@ -186,3 +190,42 @@ if (!raw) {
     `),
   ].join("");
 }
+
+function readStoredReport() {
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      const raw = store.getItem("latticeReport");
+      if (!raw) continue;
+      const data = JSON.parse(raw);
+      if (data?.report) return data;
+    } catch (_) {}
+  }
+  return null;
+}
+
+async function loadReport() {
+  const body = document.getElementById("report-body");
+  const stored = readStoredReport();
+  if (stored?.report) {
+    renderReport(stored.report, stored.image);
+    return;
+  }
+
+  body.innerHTML = "<p class='loading'>Loading report from server…</p>";
+  try {
+    const res = await fetch("/api/last-report");
+    const data = await res.json();
+    if (!res.ok) {
+      body.innerHTML = `<p class='loading'>${data.error || "No report data."} Run <strong>Analyze</strong> on the main page, then open the report again.</p>`;
+      return;
+    }
+    try {
+      localStorage.setItem("latticeReport", JSON.stringify(data));
+    } catch (_) {}
+    renderReport(data.report, data.image);
+  } catch (_) {
+    body.innerHTML = "<p class='loading'>Could not load report. Run <strong>Analyze</strong> on the main page first.</p>";
+  }
+}
+
+loadReport();

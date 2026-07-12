@@ -5,6 +5,12 @@ let lastBounds = null;
 
 const TOOL_DIAMETER_OPTIONS = [400,500,600,700,800,900,1000,1100,1200,1300,1400,1500];
 
+const SHAPE_NAMES = {
+  circle: "circle",
+  3: "triangle", 4: "square", 5: "pentagon", 6: "hexagon",
+  7: "heptagon", 8: "octagon", 9: "nonagon", 10: "decagon",
+};
+
 function initToolDiameterSelect() {
   const sel = document.getElementById("tool_diameter");
   if (!sel) return;
@@ -20,11 +26,46 @@ function initToolDiameterSelect() {
   });
 }
 
+function selectedShape() {
+  return document.getElementById("tool_shape").value || "circle";
+}
+
+function isPolygonShape() {
+  const s = selectedShape();
+  return s !== "circle" && s !== "";
+}
+
+function updateShapeLabels() {
+  const poly = isPolygonShape();
+  const label = document.getElementById("tool-size-label");
+  const hint = document.getElementById("tool-shape-hint");
+  const radiusLabel = document.getElementById("live-radius-label");
+  const eqRow = document.getElementById("live-eq-row");
+  if (label) {
+    label.textContent = poly ? "Circumdiameter (µm)" : "Tool Diameter (µm)";
+  }
+  if (hint) {
+    const name = SHAPE_NAMES[selectedShape()] || "polygon";
+    hint.textContent = poly
+      ? `${name}: size is circumdiameter (vertex-to-vertex). Area-equivalent diameter is shown in constraints.`
+      : "Circle: size is the tip diameter.";
+  }
+  if (radiusLabel) {
+    radiusLabel.textContent = poly ? "Circumradius" : "Tool radius";
+  }
+  if (eqRow) {
+    eqRow.classList.toggle("hidden", !poly);
+  }
+}
+
 function payload() {
+  const shape = selectedShape();
   return {
     peak_current: parseFloat(document.getElementById("peak_current").value),
     pulse_on: parseFloat(document.getElementById("pulse_on").value),
     duty: parseFloat(document.getElementById("duty").value),
+    tool_shape: shape,
+    tool_sides: shape === "circle" ? null : parseInt(shape, 10),
     tool_diameter: parseFloat(document.getElementById("tool_diameter").value),
     pore_diameter: parseFloat(document.getElementById("pore_diameter").value),
     working_area: parseFloat(document.getElementById("working_area").value),
@@ -44,9 +85,12 @@ async function updateBounds() {
   const td = document.getElementById("tool_diameter").value;
   const pd = document.getElementById("pore_diameter").value;
   const wa = document.getElementById("working_area").value;
+  const shape = selectedShape();
+  updateShapeLabels();
   if (!td || !pd || !wa) {
-    ["live-radius","live-ratio","live-x","live-y"].forEach(id => {
-      document.getElementById(id).textContent = "—";
+    ["live-radius","live-ratio","live-x","live-y","live-eq-diameter"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = "—";
     });
     return;
   }
@@ -54,7 +98,13 @@ async function updateBounds() {
     const res = await fetch("/api/bounds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tool_diameter: +td, pore_diameter: +pd, working_area: +wa }),
+      body: JSON.stringify({
+        tool_diameter: +td,
+        pore_diameter: +pd,
+        working_area: +wa,
+        tool_shape: shape,
+        tool_sides: shape === "circle" ? null : parseInt(shape, 10),
+      }),
     });
     const d = await res.json();
     if (!res.ok) return;
@@ -64,8 +114,15 @@ async function updateBounds() {
     document.getElementById("live-ratio").textContent = d.tool_pore_ratio;
     document.getElementById("live-x").textContent = `${d.x_min}–${d.x_max} µm`;
     document.getElementById("live-y").textContent = `${d.y_min}–${d.y_max} µm`;
+    const eqEl = document.getElementById("live-eq-diameter");
+    if (eqEl) {
+      eqEl.textContent = d.equivalent_area_diameter_um != null
+        ? `${Number(d.equivalent_area_diameter_um).toFixed(0)} µm`
+        : "—";
+    }
+    const shapeName = d.tool_shape || SHAPE_NAMES[shape] || shape;
     document.getElementById("live-formula").textContent =
-      `Valid: [${d.x_min}, ${d.x_max}] µm  (radius ${r.toFixed(0)} µm, area ${wa} µm)`;
+      `Valid: [${d.x_min}, ${d.x_max}] µm  (${shapeName}, R ${r.toFixed(0)} µm, area ${wa} µm)`;
     document.getElementById("position-hint").textContent =
       `Place tool center between ${d.x_min} and ${d.x_max} µm`;
     document.getElementById("tool_x").placeholder = `${d.x_min} – ${d.x_max}`;
@@ -73,10 +130,12 @@ async function updateBounds() {
   } catch (_) {}
 }
 
-["tool_diameter", "pore_diameter", "working_area"].forEach(id => {
+["tool_diameter", "pore_diameter", "working_area", "tool_shape"].forEach(id => {
   const el = document.getElementById(id);
-  el.addEventListener("change", updateBounds);
-  el.addEventListener("input", updateBounds);
+  if (el) {
+    el.addEventListener("change", updateBounds);
+    el.addEventListener("input", updateBounds);
+  }
 });
 
 function setGauge(ratio, pass) {
@@ -156,13 +215,17 @@ function renderMetrics(r, rep) {
   const ce = rep.circularity_explanation;
   const se = rep.supporting_explanation;
   const pc = rep.pass_criteria;
+  const shape = rep.user_inputs?.tool_shape || "circle";
+  const eqNote = rep.user_inputs?.tool_sides
+    ? ` Tool = ${shape}, circumØ ${rep.user_inputs.tool_diameter_um} µm (area-eq Ø ${rep.user_inputs.equivalent_area_diameter_um} µm).`
+    : ` Tool = circle Ø ${rep.user_inputs?.tool_diameter_um ?? "—"} µm.`;
 
   document.getElementById("verdict-box").innerHTML = `
     <h4>Analysis summary</h4>
     <div class="criteria-box">
       <strong>Pass requires:</strong> Score ≥ ${pc.circularity_score_min}/5 · Ratio ≥ ${pc.circularity_ratio_min} · Supporting intact
     </div>
-    <p class="viz-note"><strong>Preview legend:</strong> White circles = pores (grow with pore diameter). Red circles = nodes (fixed ~235.6 µm). Black lines = struts.</p>
+    <p class="viz-note"><strong>Preview legend:</strong> White circles = pores. Red circles = nodes (fixed ~235.6 µm). Black lines = struts. Purple dashed outline = tool tip.${eqNote}</p>
     <h4>Circularity</h4>
     <ul>${[...ce.reasons_pass.map(t => `<li class="pass">${t}</li>`), ...ce.reasons_fail.map(t => `<li class="fail">${t}</li>`)].join("")}</ul>
     <h4>Supporting material — ${r.supporting_material_ok ? "PASS" : "FAIL"}</h4>
@@ -171,6 +234,21 @@ function renderMetrics(r, rep) {
   `;
 
   renderOptimalHint(rep);
+}
+
+function saveReportForPage() {
+  if (!lastReport) return false;
+  const payload = { report: lastReport, image: lastLatticeImg, bounds: lastBounds };
+  const full = JSON.stringify(payload);
+  const light = JSON.stringify({ report: lastReport, image: null, bounds: lastBounds });
+  for (const store of [localStorage, sessionStorage]) {
+    try {
+      store.setItem("latticeReport", full);
+    } catch (_) {
+      try { store.setItem("latticeReport", light); } catch (__) {}
+    }
+  }
+  return true;
 }
 
 document.getElementById("analyze-form").addEventListener("submit", async (e) => {
@@ -197,6 +275,7 @@ document.getElementById("analyze-form").addEventListener("submit", async (e) => 
     window.lastResults = lastResults;
     document.getElementById("lattice-img").src = "data:image/png;base64," + data.lattice_image;
     renderMetrics(data.results, data.report);
+    saveReportForPage();
   } catch {
     showError("Server not running. Double-click RUN_SITE.bat, then open http://localhost:5050");
   } finally {
@@ -207,9 +286,13 @@ document.getElementById("analyze-form").addEventListener("submit", async (e) => 
 });
 
 document.getElementById("btn-report").addEventListener("click", () => {
-  if (!lastReport) return;
-  sessionStorage.setItem("latticeReport", JSON.stringify({ report: lastReport, image: lastLatticeImg, bounds: lastBounds }));
-  window.open("/report", "_blank", "width=1024,height=920,scrollbars=yes");
+  if (!lastReport) {
+    showError("Run Analyze first to generate the engineering report.");
+    return;
+  }
+  hideError();
+  saveReportForPage();
+  window.location.href = "/report";
 });
 
 document.getElementById("btn-grid").addEventListener("click", async () => {
@@ -226,7 +309,7 @@ document.getElementById("btn-grid").addEventListener("click", async () => {
     const res = await fetch("/api/grid-scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...p, grid_step: 75 }),
+      body: JSON.stringify({ ...p, grid_step: 100 }),
     });
     const data = await res.json();
     if (!res.ok) { showError(data.error); return; }
@@ -246,3 +329,4 @@ document.getElementById("btn-grid").addEventListener("click", async () => {
 
 updateBounds();
 initToolDiameterSelect();
+updateShapeLabels();

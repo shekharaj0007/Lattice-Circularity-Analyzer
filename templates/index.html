@@ -7,10 +7,10 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <title>LatticeFlow · EDM Analysis</title>
   <script src="/static/js/theme.js?v=7"></script>
-  <link rel="stylesheet" href="/static/css/style.css?v=7" />
+  <link rel="stylesheet" href="/static/css/style.css?v=9" />
 </head>
 <body>
-  <div class="build-tag">UI v5</div>
+  <div class="build-tag">UI v6</div>
 
   <header class="site-header">
     <div class="header-inner">
@@ -75,7 +75,21 @@
           <legend>Geometry</legend>
           <div class="fields-row">
             <label class="fld">
-              <span>Tool Diameter (µm)</span>
+              <span>Tool Shape</span>
+              <select id="tool_shape" required>
+                <option value="circle" selected>Circle</option>
+                <option value="3">Triangle (3 sides)</option>
+                <option value="4">Square (4 sides)</option>
+                <option value="5">Pentagon (5 sides)</option>
+                <option value="6">Hexagon (6 sides)</option>
+                <option value="7">Heptagon (7 sides)</option>
+                <option value="8">Octagon (8 sides)</option>
+                <option value="9">Nonagon (9 sides)</option>
+                <option value="10">Decagon (10 sides)</option>
+              </select>
+            </label>
+            <label class="fld">
+              <span id="tool-size-label">Tool Diameter (µm)</span>
               <select id="tool_diameter" required>
                 <option value="" disabled selected>Select tool size</option>
                 <option value="400">400</option>
@@ -101,6 +115,7 @@
               <input type="number" id="working_area" step="any" min="1" placeholder="1500" required />
             </label>
           </div>
+          <p class="field-hint" id="tool-shape-hint">For polygons, size is the circumdiameter (vertex-to-vertex), same role as circle diameter.</p>
         </fieldset>
 
         <fieldset class="fieldset">
@@ -122,13 +137,14 @@
           <div class="constraints-title">Position Constraints</div>
           <table class="constraints-table">
             <tbody>
-              <tr><td>Tool radius</td><td id="live-radius">—</td></tr>
+              <tr><td id="live-radius-label">Tool radius</td><td id="live-radius">—</td></tr>
+              <tr id="live-eq-row" class="hidden"><td>Area-eq. diameter</td><td id="live-eq-diameter">—</td></tr>
               <tr><td>Tool / pore ratio</td><td id="live-ratio">—</td></tr>
               <tr><td>Valid X range</td><td id="live-x">—</td></tr>
               <tr><td>Valid Y range</td><td id="live-y">—</td></tr>
             </tbody>
           </table>
-          <p class="constraints-note" id="live-formula">Valid range = [tool_radius , working_area − tool_radius]</p>
+          <p class="constraints-note" id="live-formula">Valid range = [circumradius , working_area − circumradius]</p>
         </div>
 
         <div class="form-btns">
@@ -180,6 +196,7 @@
         <div id="optimal-hint" class="optimal-hint hidden"></div>
 
         <button type="button" class="btn btn-report" id="btn-report">Open Engineering Report</button>
+        <p class="field-hint" id="report-hint">After Analyze, click above for the full 9-section engineering report.</p>
       </div>
 
       <div id="grid-results" class="hidden grid-block">
@@ -232,7 +249,7 @@
     </form>
   </div>
 
-  <script src="/static/js/app.js?v=7"></script>
+  <script src="/static/js/app.js?v=9"></script>
   <script src="/static/js/chat.js?v=8"></script>
 </body>
 </html>
