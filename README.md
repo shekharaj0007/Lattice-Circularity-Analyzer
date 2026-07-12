@@ -1,6 +1,6 @@
 LatticeFlow — EDM Lattice Circularity Predictor
 
-LIVE DEPLOYMENT AT ------https://lattice-project.onrender.com/
+
 
 # 📸 Application Screenshots
 
