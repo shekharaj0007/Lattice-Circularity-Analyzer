@@ -2,44 +2,71 @@ LatticeFlow — EDM Lattice Circularity Predictor
 
 
 
-# 📸 Application Screenshots
+# 🚀 Features Demonstration
 
-## 🏠 Main Dashboard
+## 🤖 AI Engineering Assistant
 
-![Dashboard](assets/Screenshot%202026-07-04%20164928.png)
+![AI Assistant](assets/Ai%20Engineering%20Assistant.png)
 
----
-
-## 📊 Circularity Analysis
-
-![Circularity Analysis](assets/Screenshot%202026-07-04%20165207.png)
+The built-in AI assistant helps engineers understand lattice defects, provides intelligent recommendations, and explains analysis results.
 
 ---
 
-## 📈 Geometry Visualization
+## 🔷 Circularity Analysis
 
-![Geometry Visualization](assets/Screenshot%202026-07-04%20165252.png)
+![Circularity](assets/Grid%20Scan%20For%20Circularity.png)
 
----
-
-## 🎯 Pore Detection
-
-![Pore Detection](assets/Screenshot%202026-07-04%20165310.png)
+The software scans lattice cells and computes circularity measurements to identify manufacturing defects.
 
 ---
 
-## 📐 Circularity Measurement
+## 📊 Grid Scan Analysis
 
-![Circularity Measurement](assets/Screenshot%202026-07-04%20165350.png)
+![Grid Scan](assets/Grid%20Scan%20Analyzation.png)
 
----
-
-## 📑 Final Analysis Report
-
-![Final Report](assets/Screenshot%202026-07-04%20165446.png)
+Performs a complete scan of the lattice grid and highlights problematic regions.
 
 ---
 
+## 🎯 AI Recommended Position
+
+![Best Position](assets/Grid%20Scan%20For%20Best%20Recoomended%20Position%20By%20AI.png)
+
+The AI recommends the optimal location for improving lattice circularity based on geometric analysis.
+
+---
+
+## ✅ Successful Circularity Detection
+
+![Pass](assets/Pass%20Circularity%20With%20Image%20Position.png)
+
+Displays structures that satisfy the required circularity threshold.
+
+---
+
+## ❌ Failed Circularity Detection
+
+![Fail](assets/Fail%20Circularity%20With%20Image%20Position.png)
+
+Highlights lattice regions that fail engineering requirements.
+
+---
+
+## 🔍 Analyze Other Shapes
+
+![Other Shapes](assets/Analyze%20Other%20Shapes%20.png)
+
+Supports analysis of additional engineering geometries beyond circular pores.
+
+---
+
+## 📑 Detailed Engineering Report
+
+![Report](assets/Detailed%20Engineering%20Report.png)
+
+Automatically generates engineering reports containing measurements, recommendations, and analysis summaries.
+
+---
 # 🏗️ System Architecture
 
 ```text
