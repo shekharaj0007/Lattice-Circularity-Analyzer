@@ -16,6 +16,9 @@ MODEL_PATH = ROOT / "outputs" / "circularity_grid_model.joblib"
 
 DEFAULT_CFG = LatticeConfig(working_area_um=1500, tool_diameter_um=900, pore_diameter_um=235.6)
 
+# In-memory model cache — avoid reloading joblib on every grid point
+_MODELS: dict | None = None
+
 
 def _edm_features(I, T, D):
     return np.array([
@@ -26,8 +29,20 @@ def _edm_features(I, T, D):
     ])
 
 
-def build_feature_row(cfg: LatticeConfig, I, T, D, x, y) -> np.ndarray:
-    return np.concatenate([_edm_features(I, T, D), feature_vector(cfg, x, y)])
+def build_feature_row(cfg: LatticeConfig, I, T, D, x, y, geom=None) -> np.ndarray:
+    """Build ML feature row. Pass geom to skip a second analyze_position call."""
+    if geom is None:
+        fv = feature_vector(cfg, x, y)
+    else:
+        fv = np.array([
+            x / cfg.working_area_um, y / cfg.working_area_um,
+            geom.min_dist_to_strut, geom.min_dist_to_node_center,
+            geom.nodes_inside_tool, geom.pores_center_inside_tool,
+            geom.strut_intersection_length, geom.pore_overlap_fraction,
+            geom.node_overlap_fraction, geom.geometry_risk,
+            cfg.tool_pore_ratio, cfg.working_area_um, cfg.tool_diameter_um,
+        ])
+    return np.concatenate([_edm_features(I, T, D), fv])
 
 
 def _heuristic_circularity(cfg, g, I, T, D) -> float:
@@ -83,13 +98,14 @@ def load_training_data(cfg: LatticeConfig = DEFAULT_CFG):
             sup = 1.0 if lb["supporting_ok"] and g.geometry_risk < 0.6 and I < 8 else 0.0
             if I <= 4.5 and T >= 140 and D >= 78:
                 sup = max(sup, 1.0 - g.geometry_risk)
-            X_list.append(build_feature_row(cfg, I, T, D, x, y))
+            X_list.append(build_feature_row(cfg, I, T, D, x, y, geom=g))
             y_circ.append(circ)
             y_sup.append(sup)
     return np.array(X_list), np.array(y_circ), np.array(y_sup)
 
 
 def train_and_save():
+    global _MODELS
     X, y_circ, y_sup = load_training_data()
     mc = GradientBoostingRegressor(n_estimators=120, max_depth=4, random_state=42)
     ms = GradientBoostingRegressor(n_estimators=80, max_depth=3, random_state=42)
@@ -98,44 +114,38 @@ def train_and_save():
     bundle = {"circularity": mc, "supporting": ms, "n_features": X.shape[1]}
     MODEL_PATH.parent.mkdir(exist_ok=True)
     joblib.dump(bundle, MODEL_PATH)
+    _MODELS = bundle
     return bundle
 
 
 def load_models():
+    """Load models once into memory; reuse across all predictions."""
+    global _MODELS
+    if _MODELS is not None:
+        return _MODELS
     if not MODEL_PATH.exists():
         return train_and_save()
     m = joblib.load(MODEL_PATH)
     if m.get("n_features") != 20:
         return train_and_save()
+    _MODELS = m
     return m
 
 
-def predict_at_point(
-    peak_current: float, pulse_on: float, duty: float,
-    tool_x: float, tool_y: float,
-    cfg: LatticeConfig | None = None,
-) -> dict:
-    cfg = cfg or DEFAULT_CFG
-    g = analyze_position(cfg, tool_x, tool_y)
-    models = load_models()
-    X = build_feature_row(cfg, peak_current, pulse_on, duty, tool_x, tool_y).reshape(1, -1)
-
-    h_circ = _heuristic_circularity(cfg, g, peak_current, pulse_on, duty)
-    h_sup = _heuristic_supporting(cfg, g, peak_current, pulse_on, duty)
+def _blend_prediction(cfg, g, I, T, D, models, X_row: np.ndarray) -> dict:
+    h_circ = _heuristic_circularity(cfg, g, I, T, D)
+    h_sup = _heuristic_supporting(cfg, g, I, T, D)
 
     try:
-        ml_circ = float(np.clip(models["circularity"].predict(X)[0], 1, 5))
-        ml_sup = float(models["supporting"].predict(X)[0]) >= 0.5
+        ml_circ = float(np.clip(models["circularity"].predict(X_row.reshape(1, -1))[0], 1, 5))
+        ml_sup = float(models["supporting"].predict(X_row.reshape(1, -1))[0]) >= 0.5
     except Exception:
         ml_circ, ml_sup = h_circ, h_sup
 
-    # Blend: weight heuristic more when config differs from training default
     drift = abs(cfg.tool_diameter_um - 900) / 900 + abs(cfg.pore_diameter_um - 235.6) / 235.6
     w = min(0.7, 0.35 + 0.15 * drift)
-    circ = (1 - w) * ml_circ + w * h_circ
-    circ = float(np.clip(circ, 1, 5))
+    circ = float(np.clip((1 - w) * ml_circ + w * h_circ, 1, 5))
     supporting_ok = h_sup if w > 0.5 else (ml_sup and h_sup)
-
     circ_ratio = round(circ / 5.0, 3)
     pass_fail = "PASS" if (circ >= 3.5 and supporting_ok) else "FAIL"
 
@@ -150,24 +160,80 @@ def predict_at_point(
         "nodes_inside_tool": g.nodes_inside_tool,
         "tool_pore_ratio": round(g.tool_pore_ratio, 2),
         "strut_intersection_um": round(g.strut_intersection_length, 1),
-        "tool_x_um": tool_x,
-        "tool_y_um": tool_y,
+        "tool_x_um": g.tool_x,
+        "tool_y_um": g.tool_y,
+        "_h_circ": h_circ,
+        "_h_sup": h_sup,
+        "_w": w,
     }
 
 
+def predict_at_point(
+    peak_current: float, pulse_on: float, duty: float,
+    tool_x: float, tool_y: float,
+    cfg: LatticeConfig | None = None,
+) -> dict:
+    cfg = cfg or DEFAULT_CFG
+    g = analyze_position(cfg, tool_x, tool_y)
+    models = load_models()
+    X = build_feature_row(cfg, peak_current, pulse_on, duty, tool_x, tool_y, geom=g)
+    out = _blend_prediction(cfg, g, peak_current, pulse_on, duty, models, X)
+    out.pop("_h_circ", None)
+    out.pop("_h_sup", None)
+    out.pop("_w", None)
+    return out
+
+
 def predict_grid(peak_current, pulse_on, duty, cfg: LatticeConfig | None = None, step_um=75):
+    """Batch grid scan — one geometry pass per cell, one ML predict for the whole grid."""
     cfg = cfg or DEFAULT_CFG
     positions = grid_positions(cfg, step_um=step_um)
-    circ, sup = [], []
-    for p in positions:
-        r = predict_at_point(peak_current, pulse_on, duty, p[0], p[1], cfg)
-        circ.append(r["circularity_1to5"])
-        sup.append(r["supporting_material_ok"])
+    models = load_models()
+    n = len(positions)
+    if n == 0:
+        return {
+            "positions": positions,
+            "circularity": np.array([]),
+            "supporting_ok": np.array([], dtype=bool),
+            "step_um": step_um,
+        }
+
+    edm = _edm_features(peak_current, pulse_on, duty)
+    drift = abs(cfg.tool_diameter_um - 900) / 900 + abs(cfg.pore_diameter_um - 235.6) / 235.6
+    w = min(0.7, 0.35 + 0.15 * drift)
+
+    X_rows = np.empty((n, 20), dtype=float)
+    h_circs = np.empty(n, dtype=float)
+    h_sups = np.empty(n, dtype=bool)
+    geoms = []
+
+    for i, pos in enumerate(positions):
+        x, y = float(pos[0]), float(pos[1])
+        g = analyze_position(cfg, x, y)
+        geoms.append(g)
+        X_rows[i] = build_feature_row(cfg, peak_current, pulse_on, duty, x, y, geom=g)
+        h_circs[i] = _heuristic_circularity(cfg, g, peak_current, pulse_on, duty)
+        h_sups[i] = _heuristic_supporting(cfg, g, peak_current, pulse_on, duty)
+
+    try:
+        ml_circ = np.clip(models["circularity"].predict(X_rows), 1, 5)
+        ml_sup = models["supporting"].predict(X_rows) >= 0.5
+    except Exception:
+        ml_circ = h_circs.copy()
+        ml_sup = h_sups.copy()
+
+    circ = np.clip((1 - w) * ml_circ + w * h_circs, 1, 5)
+    if w > 0.5:
+        supporting_ok = h_sups
+    else:
+        supporting_ok = ml_sup & h_sups
+
     return {
         "positions": positions,
-        "circularity": np.array(circ),
-        "supporting_ok": np.array(sup),
+        "circularity": circ,
+        "supporting_ok": supporting_ok,
         "step_um": step_um,
+        "_geoms": geoms,
     }
 
 
@@ -184,35 +250,71 @@ def find_best_position(
     lo, hi = cfg.position_bounds()
     span = hi - lo
     if step_um is None:
-        step_um = max(25.0, min(60.0, span / 18.0))
+        # Coarser grid (~10–12 steps/side) — enough for recommendations, much faster on Render
+        step_um = max(50.0, min(100.0, span / 10.0))
 
     grid = predict_grid(peak_current, pulse_on, duty, cfg, step_um=step_um)
     positions = grid["positions"]
     circ = grid["circularity"]
     sup = grid["supporting_ok"]
 
+    if len(positions) == 0:
+        cur = predict_at_point(peak_current, pulse_on, duty, current_x, current_y, cfg)
+        return {
+            "recommended_x_um": round(current_x, 1),
+            "recommended_y_um": round(current_y, 1),
+            "recommended_circularity_1to5": cur["circularity_1to5"],
+            "recommended_circularity_ratio": cur["circularity_ratio"],
+            "recommended_pass_fail": cur["pass_fail"],
+            "recommended_supporting_ok": cur["supporting_material_ok"],
+            "current_circularity_1to5": cur["circularity_1to5"],
+            "current_pass_fail": cur["pass_fail"],
+            "improvement_score": 0.0,
+            "pass_position_exists": cur["pass_fail"] == "PASS",
+            "best_score_x_um": round(current_x, 1),
+            "best_score_y_um": round(current_y, 1),
+            "best_score_circularity_1to5": cur["circularity_1to5"],
+            "grid_step_um": step_um,
+            "grid_points_scanned": 0,
+            "same_as_current": True,
+            "explanation": "No valid scan positions for this geometry.",
+        }
+
     bi = int(np.argmax(circ))
     bx, by = float(positions[bi][0]), float(positions[bi][1])
-    best = predict_at_point(peak_current, pulse_on, duty, bx, by, cfg)
 
     pass_idx = np.where((circ >= 3.5) & sup)[0]
     pass_exists = len(pass_idx) > 0
-    best_pass = None
     if pass_exists:
         pi = int(pass_idx[int(np.argmax(circ[pass_idx]))])
-        px, py = float(positions[pi][0]), float(positions[pi][1])
-        best_pass = predict_at_point(peak_current, pulse_on, duty, px, py, cfg)
+        rx, ry = float(positions[pi][0]), float(positions[pi][1])
+        r_circ = float(circ[pi])
+        r_sup = bool(sup[pi])
+    else:
+        rx, ry = bx, by
+        r_circ = float(circ[bi])
+        r_sup = bool(sup[bi])
 
     cur = predict_at_point(peak_current, pulse_on, duty, current_x, current_y, cfg)
-    rec = best_pass if best_pass else best
+    r_ratio = round(r_circ / 5.0, 3)
+    r_pass = "PASS" if (r_circ >= 3.5 and r_sup) else "FAIL"
     same_as_current = (
-        abs(rec["tool_x_um"] - current_x) < step_um * 0.6
-        and abs(rec["tool_y_um"] - current_y) < step_um * 0.6
+        abs(rx - current_x) < step_um * 0.6
+        and abs(ry - current_y) < step_um * 0.6
     )
 
+    rec = {
+        "tool_x_um": rx,
+        "tool_y_um": ry,
+        "circularity_1to5": round(r_circ, 2),
+        "circularity_ratio": r_ratio,
+        "pass_fail": r_pass,
+        "supporting_material_ok": r_sup,
+    }
+
     return {
-        "recommended_x_um": round(rec["tool_x_um"], 1),
-        "recommended_y_um": round(rec["tool_y_um"], 1),
+        "recommended_x_um": round(rx, 1),
+        "recommended_y_um": round(ry, 1),
         "recommended_circularity_1to5": rec["circularity_1to5"],
         "recommended_circularity_ratio": rec["circularity_ratio"],
         "recommended_pass_fail": rec["pass_fail"],
@@ -223,7 +325,7 @@ def find_best_position(
         "pass_position_exists": pass_exists,
         "best_score_x_um": round(bx, 1),
         "best_score_y_um": round(by, 1),
-        "best_score_circularity_1to5": best["circularity_1to5"],
+        "best_score_circularity_1to5": round(float(circ[bi]), 2),
         "grid_step_um": step_um,
         "grid_points_scanned": len(positions),
         "same_as_current": same_as_current,

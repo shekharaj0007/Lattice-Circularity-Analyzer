@@ -7,10 +7,11 @@ import matplotlib
 matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Polygon
 
 from lattice_geometry_engine import (
-    LatticeConfig, node_centers, pore_centers, strut_segments, analyze_position,
+    LatticeConfig, node_centers, pore_centers, strut_segments,
+    regular_polygon_vertices,
 )
 
 
@@ -21,7 +22,7 @@ def render_lattice_view(
     pred: dict | None = None,
 ) -> bytes:
     w = cfg.working_area_um
-    fig, ax = plt.subplots(1, 1, figsize=(8, 8), dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7), dpi=100)
     ax.set_xlim(-w * 0.03, w * 1.03)
     ax.set_ylim(-w * 0.03, w * 1.03)
     ax.set_aspect("equal")
@@ -41,16 +42,29 @@ def render_lattice_view(
     for nx, ny in node_centers(cfg):
         ax.add_patch(Circle((nx, ny), cfg.node_radius, fc="#c44", ec="#800", lw=1.2, alpha=0.85))
 
-    ax.add_patch(Circle((tool_x, tool_y), cfg.tool_radius, fc="none", ec="#5b21b6", lw=2.5, ls="--"))
+    if cfg.is_circle:
+        ax.add_patch(Circle((tool_x, tool_y), cfg.tool_radius, fc="none", ec="#5b21b6", lw=2.5, ls="--"))
+        machined_r = cfg.tool_radius * 0.88
+        ax.add_patch(Circle((tool_x, tool_y), machined_r, fc="none", ec="#dc2626", lw=2))
+    else:
+        verts = regular_polygon_vertices(
+            tool_x, tool_y, cfg.tool_radius, cfg.tool_sides, cfg.tool_rotation_deg,
+        )
+        ax.add_patch(Polygon(verts, closed=True, fc="none", ec="#5b21b6", lw=2.5, ls="--"))
+        machined = regular_polygon_vertices(
+            tool_x, tool_y, cfg.tool_radius * 0.88, cfg.tool_sides, cfg.tool_rotation_deg,
+        )
+        ax.add_patch(Polygon(machined, closed=True, fc="none", ec="#dc2626", lw=2))
     ax.plot(tool_x, tool_y, "k+", ms=10, mew=2)
-
-    machined_r = cfg.tool_radius * 0.88
-    ax.add_patch(Circle((tool_x, tool_y), machined_r, fc="none", ec="#dc2626", lw=2))
 
     ax.plot(0, 0, "ko", ms=5)
     ax.annotate("(0,0)", (0, 0), xytext=(6, 6), textcoords="offset points", fontsize=8)
 
-    title = f"Tool Ø{cfg.tool_diameter_um:.0f}µm @ ({tool_x:.0f},{tool_y:.0f})  |  {peak_current}A {pulse_on}µs {duty}%"
+    shape = cfg.tool_shape_label
+    size_bit = f"Ø{cfg.tool_diameter_um:.0f}µm"
+    if not cfg.is_circle:
+        size_bit += f" (eqØ{cfg.equivalent_area_diameter_um:.0f})"
+    title = f"Tool {shape} {size_bit} @ ({tool_x:.0f},{tool_y:.0f})  |  {peak_current}A {pulse_on}µs {duty}%"
     if pred:
         title += f"\nCirc: {pred['circularity_1to5']}/5  |  {pred['pass_fail']}"
     ax.set_title(title, fontsize=9)
@@ -76,11 +90,14 @@ def render_lattice_view(
 def render_heatmap(positions, circularity, peak_current, pulse_on, duty, cfg: LatticeConfig) -> bytes:
     xs, ys = np.unique(positions[:, 0]), np.unique(positions[:, 1])
     grid = circularity.reshape(len(ys), len(xs))
-    fig, ax = plt.subplots(figsize=(9, 7), dpi=120)
+    fig, ax = plt.subplots(figsize=(8, 6.5), dpi=100)
     im = ax.imshow(grid, origin="lower", extent=[xs[0], xs[-1], ys[0], ys[-1]],
                    aspect="equal", cmap="RdYlGn", vmin=1, vmax=5)
     plt.colorbar(im, ax=ax, label="Circularity (1–5)")
-    ax.set_title(f"Heatmap — {cfg.working_area_um:.0f}µm area, tool Ø{cfg.tool_diameter_um:.0f}µm")
+    shape = cfg.tool_shape_label
+    ax.set_title(
+        f"Heatmap — {cfg.working_area_um:.0f}µm area, {shape} Ø{cfg.tool_diameter_um:.0f}µm"
+    )
     uc = cfg.unit_cell_um
     for i in range(cfg.n_cells + 1):
         ax.axhline(i * uc, color="white", lw=0.4, alpha=0.6)

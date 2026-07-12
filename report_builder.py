@@ -54,11 +54,13 @@ def supporting_verdict(g: GeometryFeatures, cfg: LatticeConfig, I: float, T: flo
 
     if g.strut_intersection_length < 400 * (cfg.unit_cell_um / 500):
         reasons_pass.append(
-            f"Estimated strut length inside tool circle ({g.strut_intersection_length:.0f} µm) is low."
+            f"Estimated strut length inside tool {cfg.tool_shape_label} "
+            f"({g.strut_intersection_length:.0f} µm) is low."
         )
     else:
         reasons_fail.append(
-            f"Tool circle intersects ~{g.strut_intersection_length:.0f} µm of strut length — boundary may break."
+            f"Tool {cfg.tool_shape_label} intersects ~{g.strut_intersection_length:.0f} µm "
+            f"of strut length — boundary may break."
         )
 
     if cfg.tool_pore_ratio > 3.5:
@@ -155,6 +157,10 @@ def build_full_report(
             "pulse_on_us": pulse_on,
             "duty_pct": duty,
             "tool_diameter_um": cfg.tool_diameter_um,
+            "tool_shape": cfg.tool_shape_label,
+            "tool_sides": cfg.tool_sides,
+            "equivalent_area_diameter_um": round(cfg.equivalent_area_diameter_um, 1),
+            "inscribed_diameter_um": round(cfg.inscribed_diameter_um, 1),
             "pore_diameter_um": cfg.pore_diameter_um,
             "working_area_um": cfg.working_area_um,
             "tool_x_um": tool_x,
@@ -172,8 +178,9 @@ def build_full_report(
             "strut_intersection_um": g.strut_intersection_length,
             "pore_overlap_fraction": round(g.pore_overlap_fraction, 3),
             "why_position_range": (
-                f"Tool radius = {cfg.tool_radius:.0f} µm. Center must stay [{lo:.0f}, {hi:.0f}] µm "
-                f"so the full {cfg.tool_diameter_um:.0f} µm circle remains inside the "
+                f"Tool circumradius = {cfg.tool_radius:.0f} µm ({cfg.tool_shape_label}). "
+                f"Center must stay [{lo:.0f}, {hi:.0f}] µm so the full "
+                f"{cfg.tool_diameter_um:.0f} µm footprint remains inside the "
                 f"{cfg.working_area_um:.0f}×{cfg.working_area_um:.0f} µm working area."
             ),
         },
@@ -184,9 +191,14 @@ def build_full_report(
         "circularity_explanation": circ_v,
         "supporting_explanation": sup_v,
         "mathematics": {
-            "position_bounds_formula": "x_valid in [R, W - R] where R = tool_diameter/2, W = working_area",
+            "position_bounds_formula": (
+                "x_valid in [R, W - R] where R = circumdiameter/2, W = working_area"
+            ),
             "position_bounds_values": [lo, hi],
-            "tool_pore_ratio_formula": "tool_diameter / pore_diameter",
+            "tool_pore_ratio_formula": "circumdiameter / pore_diameter",
+            "equivalent_area_diameter_formula": (
+                "circle: D; n-gon: D × √(n·sin(2π/n)/(2π))"
+            ),
             "discharge_energy_formula": "I × T × (D/100)",
             "pulse_off_formula": "T × (100 - D) / D",
             "geometry_risk_formula": "0.5×strut_proximity + 0.3×strut_intersection + 0.2×tool_pore_factor",
@@ -203,6 +215,13 @@ def build_full_report(
             "Black region = supporting material (must form continuous circular ring).",
             "Red nodes = fixed-size strut junctions (~235.6 µm); white circles = pores (scale with your pore diameter input).",
             "Red nodes may be destroyed — that is acceptable.",
+            f"Tool tip shape: {cfg.tool_shape_label}. Size is circumdiameter "
+            f"{cfg.tool_diameter_um:.0f} µm"
+            + (
+                f" (area-equivalent Ø {cfg.equivalent_area_diameter_um:.0f} µm)."
+                if not cfg.is_circle
+                else "."
+            ),
             f"Reference lab success: Run 4 — 4 A, 150 µs, 80 % (tool 900 µm in original experiments).",
             "ML trained on 16 SEM-labelled experiments + geometry-augmented grid.",
             f"Your pore {cfg.pore_diameter_um} µm, tool {cfg.tool_diameter_um} µm, work area {cfg.working_area_um} µm.",

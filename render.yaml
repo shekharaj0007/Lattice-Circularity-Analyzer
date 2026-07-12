@@ -3,7 +3,8 @@ services:
     name: lattice-edm-analyzer
     runtime: python
     buildCommand: pip install -r requirements.txt && python -c "from circularity_predictor import train_and_save; train_and_save()"
-    startCommand: gunicorn web_server:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    # preload models once; 1 worker = less RAM on free tier; timeout for cold grid scans
+    startCommand: gunicorn web_server:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --preload
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"

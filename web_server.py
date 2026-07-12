@@ -10,7 +10,9 @@ from flask import Flask, jsonify, render_template, request
 
 from chat_assistant import chat_completion
 from circularity_predictor import load_models, predict_at_point, predict_grid, train_and_save, find_best_position
-from lattice_geometry_engine import LatticeConfig, TOOL_DIAMETER_OPTIONS, analyze_position
+from lattice_geometry_engine import (
+    LatticeConfig, TOOL_DIAMETER_OPTIONS, TOOL_SHAPE_OPTIONS, analyze_position,
+)
 from report_builder import build_full_report
 from synthetic_view import render_heatmap, render_lattice_view
 
@@ -33,6 +35,9 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 load_models()
 
+# Latest analysis payload for the engineering report page (survives popup/storage issues)
+_LAST_REPORT_PAYLOAD: dict | None = None
+
 
 @app.after_request
 def no_cache_static(response):
@@ -43,11 +48,29 @@ def no_cache_static(response):
     return response
 
 
+def _parse_tool_sides(data: dict) -> int | None:
+    """Accept tool_shape ('circle' | '3'..'10') or tool_sides (null | 3..10)."""
+    if "tool_sides" in data and data["tool_sides"] not in (None, "", "circle"):
+        sides = int(data["tool_sides"])
+        if not 3 <= sides <= 10:
+            raise ValueError("tool_sides must be 3–10")
+        return sides
+    shape = str(data.get("tool_shape", "circle")).strip().lower()
+    if shape in ("", "circle"):
+        return None
+    sides = int(shape)
+    if not 3 <= sides <= 10:
+        raise ValueError("tool_shape must be circle or 3–10")
+    return sides
+
+
 def _cfg_from_data(data: dict) -> LatticeConfig:
     return LatticeConfig(
         working_area_um=float(data["working_area"]),
         tool_diameter_um=float(data["tool_diameter"]),
         pore_diameter_um=float(data["pore_diameter"]),
+        tool_sides=_parse_tool_sides(data),
+        tool_rotation_deg=float(data.get("tool_rotation_deg", 0) or 0),
     )
 
 
@@ -57,12 +80,15 @@ def _img_b64(png: bytes) -> str:
 
 @app.route("/api/version")
 def version_api():
-    return jsonify({"ui_version": 5, "app": "LatticeFlow EDM", "port_hint": 5050})
+    return jsonify({"ui_version": 6, "app": "LatticeFlow EDM", "port_hint": 5050})
 
 
 @app.route("/api/tool-options")
 def tool_options_api():
-    return jsonify({"options": TOOL_DIAMETER_OPTIONS})
+    return jsonify({
+        "options": TOOL_DIAMETER_OPTIONS,
+        "shapes": TOOL_SHAPE_OPTIONS,
+    })
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -80,9 +106,20 @@ def chat_api():
     return jsonify(result)
 
 
+@app.route("/api/last-report")
+def last_report_api():
+    if not _LAST_REPORT_PAYLOAD:
+        return jsonify({"error": "No analysis yet. Run Analyze on the main page first."}), 404
+    return jsonify(_LAST_REPORT_PAYLOAD)
+
+
 @app.route("/")
 def index():
-    return render_template("index.html", tool_options=TOOL_DIAMETER_OPTIONS)
+    return render_template(
+        "index.html",
+        tool_options=TOOL_DIAMETER_OPTIONS,
+        tool_shapes=TOOL_SHAPE_OPTIONS,
+    )
 
 
 @app.route("/report")
@@ -98,15 +135,18 @@ def bounds():
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "Invalid geometry fields"}), 400
     lo, hi = cfg.position_bounds()
+    size = cfg.tool_size_summary()
     return jsonify({
         "x_min": round(lo, 1), "x_max": round(hi, 1),
         "y_min": round(lo, 1), "y_max": round(hi, 1),
         "tool_radius": cfg.tool_radius,
         "tool_pore_ratio": round(cfg.tool_pore_ratio, 2),
         "unit_cell_um": round(cfg.unit_cell_um, 1),
+        **size,
         "hint": (
             f"Place tool center between {lo:.0f} and {hi:.0f} µm "
-            f"(tool radius {cfg.tool_radius:.0f} µm inside {cfg.working_area_um:.0f} µm area)."
+            f"({cfg.tool_shape_label} circumradius {cfg.tool_radius:.0f} µm "
+            f"inside {cfg.working_area_um:.0f} µm area)."
         ),
     })
 
@@ -128,7 +168,12 @@ def analyze():
     if not (lo <= x <= hi and lo <= y <= hi):
         return jsonify({"error": f"Position must be within [{lo:.0f}, {hi:.0f}] µm for this tool size"}), 400
     if I <= 0 or T <= 0 or D <= 0 or D > 100:
-        return jsonify({"error": "Invalid EDM parameters"}), 400
+        return jsonify({
+            "error": (
+                "Invalid EDM parameters — fill Peak Current (>0 A), Pulse-On (>0 µs), "
+                "and Duty (1–100 %). Example: 4 A, 150 µs, 80 %."
+            ),
+        }), 400
     if cfg.pore_diameter_um <= 0 or cfg.working_area_um <= cfg.tool_diameter_um:
         return jsonify({"error": "Pore must be > 0 and working area must exceed tool diameter"}), 400
 
@@ -141,12 +186,20 @@ def analyze():
         optimal_position=optimal,
     )
     lattice_png = render_lattice_view(x, y, I, T, D, cfg, result)
+    lattice_b64 = _img_b64(lattice_png)
+
+    global _LAST_REPORT_PAYLOAD
+    _LAST_REPORT_PAYLOAD = {
+        "report": report,
+        "image": lattice_b64,
+        "results": result,
+    }
 
     return jsonify({
         "success": True,
         "results": result,
         "report": report,
-        "lattice_image": _img_b64(lattice_png),
+        "lattice_image": lattice_b64,
     })
 
 
@@ -156,7 +209,7 @@ def grid_scan():
     try:
         cfg = _cfg_from_data(data)
         I, T, D = float(data["peak_current"]), float(data["pulse_on"]), float(data["duty"])
-        step = float(data.get("grid_step", 75))
+        step = float(data.get("grid_step", 100))
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "Invalid parameters"}), 400
 
@@ -180,6 +233,6 @@ def grid_scan():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5050))
     print(f"\n  LatticeFlow EDM -> http://localhost:{port}")
-    print("  UI version: 5 — look for 'UI v5' badge top-right")
+    print("  UI version: 6 — look for 'UI v6' badge top-right")
     print("  Wrong page? You may have old tab on :5000 or Streamlit on :8501\n")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
