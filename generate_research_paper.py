@@ -398,59 +398,268 @@ def build():
         styles, max_h=2.2 * inch,
     ))
 
-    # 6 ML train/validate
-    story.append(p("6. Machine Learning — Train, Test, Validate", styles["heading1"]))
+    # 6 ML detailed
+    story.append(p("6. Machine Learning in Detail", styles["heading1"]))
     story.append(p(
-        "<b>Features (20-D):</b> EDM block (<i>I</i>, <i>T</i>, <i>D</i>, energy, pulse-off, "
-        "<i>I</i>×<i>D</i>, <i>T</i>/<i>D</i>) + geometry block (normalized <i>x,y</i>, distances, "
-        "counts, overlaps, geometry risk, tool/pore ratio, working area, tool diameter).",
+        "This section explains exactly what is learned, from which labels, with which algorithms, "
+        "how models are validated on only sixteen SEM trials, and how a prediction is formed for "
+        "an unseen landing position.",
+        styles["body_noindent"],
+    ))
+
+    story.append(p("6.1 Learning targets (what the models try to predict)", styles["heading2"]))
+    story.append(p(
+        "Two supervised targets are used. <b>Target A — boundary circularity score</b> "
+        "<i>c</i> ∈ {1,2,3,4,5} from SEM judgment of the supporting ring (Run&nbsp;4 = 5; most "
+        "failures = 1–2). At inference we also report <b>circularity ratio</b> = <i>c</i>/5 "
+        "(so 3.5/5 → 0.70). <b>Target B — supporting integrity</b> "
+        "<i>s</i> ∈ {0,1}: whether the black ring is continuous. Hole deviation is "
+        "<i>not</i> the training target for the position-aware system, because minimizing it "
+        "recovers Run&nbsp;5 and destroys struts.",
+        styles["body"],
+    ))
+
+    story.append(p("6.2 Feature vector (20 dimensions)", styles["heading2"]))
+    story.append(p(
+        "Every training row and every query builds the same 20-D vector "
+        "<b>X = [X<sub>EDM</sub> | X<sub>geom</sub>]</b>.",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "<b>EDM block (7 features):</b> raw settings <i>I</i>, <i>T</i>, <i>D</i>; "
+        "discharge energy <i>E</i> = <i>I</i>·<i>T</i>·(<i>D</i>/100); "
+        "pulse-off proxy <i>T</i>·(100−<i>D</i>)/<i>D</i>; interaction terms <i>I</i>·<i>D</i> and "
+        "<i>T</i>/<i>D</i>. These terms let trees split on intensity and on “gentle vs punchy” "
+        "delivery, not only on raw ampere or microsecond values.",
         styles["body"],
     ))
     story.append(p(
-        "<b>Models:</b> GradientBoostingRegressor — 120 trees (circularity 1–5) and 80 trees "
-        "(supporting integrity, threshold 0.5). Separately, a Matérn&nbsp;5/2 Gaussian Process on "
-        "the 16 SEM labels searches favorable (<i>I</i>, <i>T</i>, <i>D</i>) neighborhoods; "
-        "polynomial Ridge under leave-one-out CV estimates small-n MAE (≈1.02 / 5).",
+        "<b>Geometry block (13 features):</b> normalized landing "
+        "<i>x</i>/<i>W</i>, <i>y</i>/<i>W</i> (<i>W</i> = 1500&nbsp;µm); "
+        "min distance to strut; min distance to node center; count of nodes inside the tool; "
+        "count of pore centers inside the tool; strut intersection length inside the footprint; "
+        "pore overlap fraction; node overlap fraction; scalar geometry risk; tool/pore ratio; "
+        "working area; tool diameter. This block is why the model can answer “same recipe, "
+        "different (<i>x</i>,&nbsp;<i>y</i>)”.",
+        styles["body"],
+    ))
+
+    feat_table = [
+        [p(h, styles["table_header"]) for h in ["#", "Feature", "Type", "Role in learning"]],
+        [p(c, styles["table_cell"]) for c in ["1–3", "I, T, D", "EDM raw", "Primary process controls"]],
+        [p(c, styles["table_cell"]) for c in ["4", "Energy E", "EDM derived", "Total spark intensity"]],
+        [p(c, styles["table_cell"]) for c in ["5", "Pulse-off proxy", "EDM derived", "Flush / recovery time"]],
+        [p(c, styles["table_cell"]) for c in ["6–7", "I·D, T/D", "EDM interaction", "Duty-coupled effects"]],
+        [p(c, styles["table_cell"]) for c in ["8–9", "x/W, y/W", "Geometry", "Where the tool lands"]],
+        [p(c, styles["table_cell"]) for c in ["10–11", "Dist. strut/node", "Geometry", "Clearance to ligaments"]],
+        [p(c, styles["table_cell"]) for c in ["12–13", "Nodes/pores in tool", "Geometry", "How much cell is engulfed"]],
+        [p(c, styles["table_cell"]) for c in ["14–16", "Strut len, overlaps", "Geometry", "Damage exposure"]],
+        [p(c, styles["table_cell"]) for c in ["17", "Geometry risk", "Geometry", "Compressed risk index"]],
+        [p(c, styles["table_cell"]) for c in ["18–20", "Ratio, W, tool Ø", "Config", "Scale / overfill context"]],
+    ]
+    story.append(styled_table(feat_table, [0.55*inch, 1.45*inch, 1.1*inch, 2.5*inch]))
+    story.append(p("Table 1. Full 20-D feature vector used by Gradient Boosting.", styles["caption"]))
+
+    story.append(p("6.3 Building supervised labels from only 16 SEM runs", styles["heading2"]))
+    story.append(p(
+        "Lab SEM gives one circularity and one integrity flag per EDM recipe — not per landing. "
+        "To supervise position dependence we <b>replay</b> each recipe on a landing grid "
+        "(step 150&nbsp;µm inside valid tool-center bounds → 25 landings → 16×25 = 400 rows):",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "<i>c</i><sub>train</sub>(run,<i>x,y</i>) = clip( <i>c</i><sub>SEM</sub>(run) "
+        "− 2.5·geometry_risk(<i>x,y</i>) + edm_bonus(<i>I,T,D</i>) , 1, 5 )",
+        styles["eq"],
+    ))
+    story.append(p(
+        "where edm_bonus = +0.5 if (<i>I</i>≤5, <i>T</i>≥130, <i>D</i>≥75), −1.0 if <i>I</i>≥8, "
+        "else 0. Supporting label <i>s</i><sub>train</sub> = 1 only if the SEM flag is intact "
+        "<i>and</i> geometry_risk &lt; 0.6 <i>and</i> <i>I</i> &lt; 8; for near-Run&nbsp;4 recipes "
+        "(<i>I</i>≤4.5, <i>T</i>≥140, <i>D</i>≥78) we allow <i>s</i><sub>train</sub> = "
+        "max(s, 1 − geometry_risk). This is physics-informed label propagation: the SEM score "
+        "is the anchor; geometry risk lowers the target when the tool sits on struts.",
         styles["body"],
     ))
     story.append(p(
-        "<b>Validation practice for sparse SEM data:</b> (i) LOOCV on 16 labels; "
-        "(ii) 5-fold CV on exploratory 16+synthetic deviation models; "
-        "(iii) qualitative grid checks — Run&nbsp;4-like recipes peak at low-risk pore centers; "
-        "high-current recipes stay FAIL; GP candidates cluster near 4&nbsp;A / 150&nbsp;µs / 80%. "
-        "SEM remains the ultimate test.",
+        "Separately, a Gaussian Process posterior over the 16 real (<i>I</i>, <i>T</i>, <i>D</i>) "
+        "points produces 1,100 synthetic EDM rows used to densify process-parameter space for "
+        "exploratory models. Those synthetics are tagged <font face='Courier'>GP_posterior</font> "
+        "and are never treated as new SEM ground truth.",
+        styles["body"],
+    ))
+
+    story.append(p("6.4 Algorithms and hyperparameters", styles["heading2"]))
+    story.append(p(
+        "<b>(A) Position-aware predictors — Gradient Boosting.</b> "
+        "Two <font face='Courier'>GradientBoostingRegressor</font> models (scikit-learn) are "
+        "trained on the 400×20 matrix:",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "• Circularity model: <i>n_estimators</i>=120, <i>max_depth</i>=4, "
+        "<i>random_state</i>=42 → continuous score clipped to [1,5].",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "• Supporting model: <i>n_estimators</i>=80, <i>max_depth</i>=3, "
+        "<i>random_state</i>=42 → score thresholded at 0.5 for intact/not.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "Gradient boosting was chosen because the feature set mixes continuous physics quantities "
+        "with nonlinear interactions (e.g., high current only becomes catastrophic when strut "
+        "intersection is large), and tree ensembles handle mixed-scale features without heavy "
+        "normalization. Depth is kept shallow (3–4) to limit overfitting on a few hundred "
+        "physically correlated rows derived from only 16 recipes.",
         styles["body"],
     ))
     story.append(p(
-        "<b>Inference blend:</b> <i>c</i> = (1−<i>w</i>)·<i>c</i><sub>ML</sub> + <i>w</i>·<i>c</i><sub>H</sub>, "
-        "with <i>w</i> rising when tool/pore sizes drift from the lab geometry. "
-        "<b>Circularity ratio</b> = <i>c</i>/5. PASS if <i>c</i> ≥ 3.5, supporting intact, risk ≤ 0.55.",
+        "<b>(B) Recipe search on SEM labels — Gaussian Process.</b> "
+        "A <font face='Courier'>GaussianProcessRegressor</font> with kernel "
+        "Matérn(<i>ν</i>=2.5) + WhiteKernel(noise=0.3), <i>normalize_y</i>=True, is fit on the "
+        "16 points (<i>I</i>, <i>T</i>, <i>D</i>) → SEM circularity. About 3,000 random candidates "
+        "are drawn (half concentrated near the gentle island 3.5–5.5&nbsp;A / 120–150&nbsp;µs / "
+        "75–80%, half over the full DOE box). Candidates are ranked by "
+        "<i>μ</i> + 0.15·<i>σ</i> (mean plus mild exploration). This recovers the Run&nbsp;4 "
+        "neighborhood (≈3.6–4.8&nbsp;A, ≈150&nbsp;µs, ≈79–80%) with predicted scores ≈4.6–4.9.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>(C) Small-n baseline — polynomial Ridge LOOCV.</b> "
+        "Degree-2 polynomial features of (<i>I</i>, <i>T</i>, <i>D</i>) with Ridge(<i>α</i>=0.5) "
+        "under leave-one-out cross-validation measure how predictable SEM circularity is from "
+        "recipe alone. Result: LOO MAE ≈ 1.02 on the 1–5 scale — usable as a guide, not as "
+        "high-precision metrology.",
+        styles["body"],
+    ))
+
+    story.append(p("6.5 Training procedure", styles["heading2"]))
+    story.append(p(
+        "1. Load <font face='Courier'>original_16_runs.csv</font> and "
+        "<font face='Courier'>run_visual_labels.csv</font>.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "2. Enumerate landing grid with <font face='Courier'>grid_positions(step_um=150)</font>.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "3. For each (run, landing): run <font face='Courier'>analyze_position</font>, "
+        "build 20-D <b>X</b>, compute <i>c</i><sub>train</sub> and <i>s</i><sub>train</sub>.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "4. Fit both Gradient Boosting models with <font face='Courier'>.fit(X, y)</font>.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "5. Persist bundle "
+        "{circularity, supporting, n_features=20} via joblib for reuse at inference.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "No random train/test split of landings is used as the primary protocol, because landings "
+        "from the same run are strongly dependent. Instead, honesty comes from LOOCV on the 16 "
+        "independent SEM recipes plus physical consistency checks (next subsection).",
+        styles["body"],
+    ))
+
+    story.append(p("6.6 Validation and testing strategy", styles["heading2"]))
+    story.append(p(
+        "<b>Quantitative:</b> Leave-one-out CV on the 16 SEM circularity labels (Ridge/polynomial) "
+        "→ MAE ≈ 1.02. Exploratory models that include the 1,100 GP synthetics use 5-fold "
+        "cross-validated MAE on hole-deviation responses to watch overfitting in EDM space only.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>Qualitative consistency tests (critical for n=16):</b> "
+        "(i) for Run&nbsp;4-like recipes, predicted circularity must peak at low geometry-risk "
+        "pore-centered landings; "
+        "(ii) for <i>I</i> ≥ 8&nbsp;A, predictions must stay FAIL across the grid; "
+        "(iii) GP search must place top candidates near 4&nbsp;A / 150&nbsp;µs / 80%; "
+        "(iv) deviation-minimizing recipes must not outrank SEM-successful ones when the "
+        "circularity target is used. SEM images remain the final acceptance test.",
+        styles["body"],
+    ))
+
+    story.append(p("6.7 Physics heuristic and ML–physics blending at inference", styles["heading2"]))
+    story.append(p(
+        "A transparent heuristic score <i>c</i><sub>H</sub> encodes SEM lessons without trees: "
+        "base ≈ 4.2–4.5 for gentle recipes (<i>I</i>≤5, long <i>T</i>, high <i>D</i>); "
+        "base ≈ 1.8–2.2 for aggressive recipes; then "
+        "<i>c</i><sub>H</sub> ← clip(<i>c</i><sub>H</sub> − 2.2·geometry_risk "
+        "+ 0.3·[dist_strut&gt;150], 1, 5). Supporting heuristic requires gentle EDM and "
+        "geometry_risk ≤ 0.55 (stricter if intersection length is large); <i>I</i> ≥ 8 always fails.",
+        styles["body"],
+    ))
+    story.append(p(
+        "Final score blends ML and heuristic:",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "<i>c</i> = (1−<i>w</i>) · <i>c</i><sub>ML</sub> + <i>w</i> · <i>c</i><sub>H</sub>, &nbsp;&nbsp; "
+        "<i>w</i> = min(0.7, 0.35 + 0.15·drift),",
+        styles["eq"],
+    ))
+    story.append(p(
+        "where drift = |toolØ − 900|/900 + |poreØ − 235.6|/235.6. Near the lab geometry, ML "
+        "dominates; when the user changes tool/pore sizes far from training, the heuristic weight "
+        "rises so the system does not confidently hallucinate. Supporting integrity similarly "
+        "requires heuristic agreement when <i>w</i> is large. "
+        "<b>Circularity ratio</b> = <i>c</i>/5. "
+        "PASS if <i>c</i> ≥ 3.5, supporting intact, and geometry risk ≤ 0.55.",
         styles["body"],
     ))
 
     ml_table = [
         [p(h, styles["table_header"]) for h in ["Stage", "Data", "Method", "Purpose"]],
-        [p(c, styles["table_cell"]) for c in ["SEM fit", "16 labels", "GP Matérn 5/2", "Search robust (I,T,D)"]],
-        [p(c, styles["table_cell"]) for c in ["Small-n CV", "16-run LOOCV", "Poly Ridge", "Circularity MAE"]],
-        [p(c, styles["table_cell"]) for c in ["Densify EDM", "GP posterior", "1,100 points", "Fill input space"]],
-        [p(c, styles["table_cell"]) for c in ["Spatial expand", "16 × ~25 landings", "Risk-modulated labels", "Teach position effect"]],
-        [p(c, styles["table_cell"]) for c in ["Position model", "~400 × 20 feats", "GBR 120 + GBR 80", "Score & support"]],
-        [p(c, styles["table_cell"]) for c in ["Inference", "Any (I,T,D,x,y)", "ML + heuristic", "Ratio = score/5"]],
+        [p(c, styles["table_cell"]) for c in ["Recipe search", "16 SEM labels", "GP Matérn 5/2", "Find robust (I,T,D)"]],
+        [p(c, styles["table_cell"]) for c in ["Small-n CV", "16-run LOOCV", "Poly Ridge α=0.5", "MAE ≈ 1.02 / 5"]],
+        [p(c, styles["table_cell"]) for c in ["Densify EDM", "GP posterior", "1,100 synthetics", "Fill input space"]],
+        [p(c, styles["table_cell"]) for c in ["Spatial labels", "16 × 25 landings", "Risk-modulated SEM", "Teach (x,y) effect"]],
+        [p(c, styles["table_cell"]) for c in ["Fit models", "400 × 20 features", "GBR 120 + GBR 80", "Score & support"]],
+        [p(c, styles["table_cell"]) for c in ["Inference", "Any (I,T,D,x,y)", "ML + heuristic blend", "Ratio = score/5"]],
     ]
-    story.append(styled_table(ml_table, [1.15*inch, 1.4*inch, 1.55*inch, 1.8*inch]))
-    story.append(p("Table 1. Training, validation, and inference stack.", styles["caption"]))
+    story.append(styled_table(ml_table, [1.15*inch, 1.35*inch, 1.55*inch, 1.55*inch]))
+    story.append(p("Table 2. End-to-end ML stack from labels to inference.", styles["caption"]))
 
     # 7 Any-position steps
     story.append(p("7. Predicting Circularity Ratio for Any Position", styles["heading1"]))
-    story.append(p("1. Geometry engine at (<i>x</i>,&nbsp;<i>y</i>) → risk and overlap features.", styles["bullet"]))
-    story.append(p("2. Build 20-D feature row (EDM + geometry).", styles["bullet"]))
-    story.append(p("3. Predict ML circularity score and supporting flag.", styles["bullet"]))
-    story.append(p("4. Evaluate physics heuristic from gentle/aggressive rules + risk.", styles["bullet"]))
-    story.append(p("5. Blend ML with heuristic; report ratio = score/5 and PASS/FAIL.", styles["bullet"]))
     story.append(p(
-        "Scanning many landings for fixed EDM settings produces a spatial circularity field — "
-        "the practical realization that position matters.",
-        styles["body"],
+        "For a query (<i>I</i>, <i>T</i>, <i>D</i>, <i>x</i>, <i>y</i>) the runtime path is:",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "1. <b>Geometry pass:</b> <font face='Courier'>analyze_position(x,y)</font> computes "
+        "distances, overlaps, intersection length, and geometry_risk.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "2. <b>Feature build:</b> concatenate 7 EDM features with 13 geometry features → 20-D row.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "3. <b>ML forward:</b> circularity GBR → <i>c</i><sub>ML</sub>; supporting GBR → "
+        "<i>s</i><sub>ML</sub> (threshold 0.5).",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "4. <b>Heuristic forward:</b> evaluate <i>c</i><sub>H</sub> and <i>s</i><sub>H</sub> from "
+        "the gentle/aggressive rules and risk.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "5. <b>Blend:</b> compute drift-based weight <i>w</i>; "
+        "<i>c</i> = (1−<i>w</i>)<i>c</i><sub>ML</sub> + <i>w</i><i>c</i><sub>H</sub>; "
+        "combine supporting flags.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "6. <b>Report:</b> score <i>c</i>, circularity ratio <i>c</i>/5, supporting OK, "
+        "geometry risk, PASS/FAIL. Repeating steps 1–6 on a fine (<i>x</i>,&nbsp;<i>y</i>) grid "
+        "yields a spatial circularity field for fixed EDM settings.",
+        styles["bullet"],
     ))
 
     # 8 Final answers (no Phase wording)
@@ -472,15 +681,17 @@ def build():
         [p(c, styles["table_cell"]) for c in ["Deviation-only (reject)", "6", "50", "64", "Fails SEM ring"]],
     ]
     story.append(styled_table(rec, [1.85*inch, 0.7*inch, 0.75*inch, 0.7*inch, 1.6*inch]))
-    story.append(p("Table 2. Final parameter answers from the ML/physics process.", styles["caption"]))
+    story.append(p("Table 3. Final parameter answers from the ML/physics process.", styles["caption"]))
 
     story.append(p("9. Conclusion", styles["heading1"]))
     story.append(p(
         "Sparse SEM-labeled EDM data can still support position-aware circularity prediction if "
         "we couple process physics with lattice geometry, expand 16 labels through GP synthesis "
-        "and risk-modulated spatial replay, train Gradient Boosting, and regularize with heuristics "
-        "at inference. Circularity ratio becomes computable for any tool position by teaching the "
-        "geometry–process interaction that SEM revealed — not by collecting thousands of new trials.",
+        "and risk-modulated spatial replay, train Gradient Boosting on a 20-D EDM+geometry feature "
+        "vector, validate with LOOCV plus physical consistency checks, and regularize with "
+        "heuristics at inference. Circularity ratio becomes computable for any tool position by "
+        "teaching the geometry–process interaction that SEM revealed — not by collecting thousands "
+        "of new trials.",
         styles["body"],
     ))
 
