@@ -400,33 +400,28 @@ def build():
         "Fine servo feed + stable flush",
     ], 14)
 
-    # ========== 20 CONCLUSION ==========
-    s = add("Conclusion & Takeaways")
-    takeaways = [
-        ("SEM first", "Supporting-ring circularity — not hole deviation — is the success metric."),
-        ("Sparse → dense", "16 runs expand via GP synthetics + geometry-risk spatial label replay."),
-        ("Any position", "20-D EDM+geometry features + GBR + physics blend → ratio at any (x,y)."),
-        ("LatticeFlow", "Website turns the science into grid heatmaps, PASS/FAIL, reports, and guidance."),
-    ]
-    for i, (title, body) in enumerate(takeaways):
-        t = Inches(1.35 + i * 1.35)
-        round_rect(s, Inches(0.5), t, Inches(12.3), Inches(1.2), WHITE)
-        rect(s, Inches(0.5), t, Inches(0.14), Inches(1.2), TEAL if i % 2 == 0 else AMBER)
-        textbox(s, Inches(0.9), t + Inches(0.2), Inches(11.5), Inches(0.35), title, 16, True, NAVY)
-        textbox(s, Inches(0.9), t + Inches(0.55), Inches(11.5), Inches(0.45), body, 14, False, SLATE)
-
-    # ========== 21 THANK YOU ==========
+    # ========== 20 CONCLUSION + THANK YOU ==========
     s = add(cream=False)
     rect(s, Inches(0), Inches(0), Inches(13.333), Inches(7.5), NAVY)
     rect(s, Inches(0), Inches(0), Inches(0.18), Inches(7.5), AMBER)
-    textbox(s, Inches(0.8), Inches(2.4), Inches(11.7), Inches(1.0),
-            "Thank You", 48, True, WHITE, PP_ALIGN.CENTER)
-    textbox(s, Inches(0.8), Inches(3.6), Inches(11.7), Inches(0.6),
-            "Questions & Discussion", 22, False, RGBColor(0xB8, 0xC7, 0xD4), PP_ALIGN.CENTER)
-    textbox(s, Inches(0.8), Inches(5.2), Inches(11.7), Inches(0.8),
-            "PDF research paper + this deck available in the project repository\n"
+    textbox(s, Inches(0.7), Inches(0.45), Inches(12), Inches(0.5),
+            "Conclusion & Thank You", 28, True, WHITE)
+    takeaways = [
+        "SEM first — supporting-ring circularity beats hole-deviation metrics",
+        "Sparse → dense — GP synthetics + geometry-risk spatial label replay",
+        "Any position — 20-D features + GBR + physics blend → ratio at any (x,y)",
+        "LatticeFlow — heatmaps, PASS/FAIL, reports, and AI guidance in one tool",
+    ]
+    for i, line in enumerate(takeaways):
+        t = Inches(1.3 + i * 0.85)
+        round_rect(s, Inches(0.7), t, Inches(11.9), Inches(0.7), RGBColor(0x14, 0x28, 0x3E))
+        textbox(s, Inches(1.0), t + Inches(0.18), Inches(11.3), Inches(0.4), line, 16, False, WHITE)
+    textbox(s, Inches(0.7), Inches(5.0), Inches(11.9), Inches(0.5),
+            "Questions & Discussion", 22, True, TEAL, PP_ALIGN.CENTER)
+    textbox(s, Inches(0.7), Inches(5.7), Inches(11.9), Inches(0.8),
+            "PDF research paper + presentation decks are in the project repository\n"
             "Lattice Circularity Analyzer  ·  LatticeFlow",
-            14, False, RGBColor(0x8A, 0xA0, 0xB2), PP_ALIGN.CENTER)
+            13, False, RGBColor(0x8A, 0xA0, 0xB2), PP_ALIGN.CENTER)
 
     total = len(all_slides)
     for i, slide in enumerate(all_slides):
