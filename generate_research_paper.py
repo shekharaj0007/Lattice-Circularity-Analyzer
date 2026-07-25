@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Generate a visual 8–10 page research paper PDF for the Lattice EDM project."""
+"""
+Research paper PDF: ML/physics process for predicting lattice EDM circularity
+at any tool position. No website content. No handwritten ideation photos.
+"""
 
 from __future__ import annotations
 
@@ -34,11 +37,11 @@ def make_styles():
     return {
         "title": ParagraphStyle(
             "PaperTitle", parent=base["Title"], fontName="Times-Bold",
-            fontSize=15.5, leading=19, alignment=TA_CENTER, spaceAfter=8,
+            fontSize=15, leading=18, alignment=TA_CENTER, spaceAfter=8,
         ),
         "authors": ParagraphStyle(
             "Authors", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=11, leading=14, alignment=TA_CENTER, spaceAfter=4,
+            fontSize=11, leading=14, alignment=TA_CENTER, spaceAfter=3,
         ),
         "affiliation": ParagraphStyle(
             "Affiliation", parent=base["Normal"], fontName="Times-Italic",
@@ -46,51 +49,55 @@ def make_styles():
         ),
         "heading1": ParagraphStyle(
             "H1", parent=base["Heading1"], fontName="Times-Bold",
-            fontSize=12, leading=15, spaceBefore=12, spaceAfter=7,
+            fontSize=12, leading=15, spaceBefore=11, spaceAfter=6,
         ),
         "heading2": ParagraphStyle(
             "H2", parent=base["Heading2"], fontName="Times-Bold",
-            fontSize=11, leading=13, spaceBefore=9, spaceAfter=5,
+            fontSize=11, leading=13, spaceBefore=8, spaceAfter=4,
         ),
         "body": ParagraphStyle(
             "Body", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=10.2, leading=13.5, alignment=TA_JUSTIFY,
+            fontSize=10.2, leading=13.4, alignment=TA_JUSTIFY,
             spaceAfter=7, firstLineIndent=14,
         ),
         "body_noindent": ParagraphStyle(
             "BodyNoIndent", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=10.2, leading=13.5, alignment=TA_JUSTIFY, spaceAfter=7,
+            fontSize=10.2, leading=13.4, alignment=TA_JUSTIFY, spaceAfter=7,
         ),
         "abstract": ParagraphStyle(
             "Abstract", parent=base["Normal"], fontName="Times-Roman",
             fontSize=9.8, leading=12.8, alignment=TA_JUSTIFY, spaceAfter=6,
-            leftIndent=16, rightIndent=16,
+            leftIndent=14, rightIndent=14,
         ),
         "caption": ParagraphStyle(
             "Caption", parent=base["Normal"], fontName="Times-Italic",
             fontSize=9, leading=11, alignment=TA_CENTER,
-            spaceBefore=3, spaceAfter=10,
+            spaceBefore=2, spaceAfter=9,
         ),
         "table_cell": ParagraphStyle(
             "TableCell", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=7.5, leading=9.5, alignment=TA_CENTER,
+            fontSize=7.8, leading=9.5, alignment=TA_CENTER,
         ),
         "table_header": ParagraphStyle(
             "TableHeader", parent=base["Normal"], fontName="Times-Bold",
-            fontSize=7.5, leading=9.5, alignment=TA_CENTER,
+            fontSize=7.8, leading=9.5, alignment=TA_CENTER,
         ),
         "ref": ParagraphStyle(
             "Ref", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=8.5, leading=11, leftIndent=14, firstLineIndent=-14,
+            fontSize=8.8, leading=11, leftIndent=14, firstLineIndent=-14,
             spaceAfter=3, alignment=TA_LEFT,
         ),
         "keywords": ParagraphStyle(
             "Keywords", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=9.3, leading=12, leftIndent=14, rightIndent=14, spaceAfter=8,
+            fontSize=9.5, leading=12, leftIndent=14, rightIndent=14, spaceAfter=8,
         ),
         "bullet": ParagraphStyle(
             "Bullet", parent=base["Normal"], fontName="Times-Roman",
-            fontSize=9.5, leading=12, leftIndent=16, spaceAfter=3,
+            fontSize=10, leading=13, leftIndent=16, spaceAfter=3,
+        ),
+        "eq": ParagraphStyle(
+            "Eq", parent=base["Normal"], fontName="Times-Roman",
+            fontSize=10.2, leading=13.4, alignment=TA_CENTER, spaceAfter=8, spaceBefore=2,
         ),
     }
 
@@ -98,7 +105,7 @@ def make_styles():
 def add_page_number(canvas, doc):
     canvas.saveState()
     canvas.setFont("Times-Roman", 9)
-    canvas.drawCentredString(PAGE_W / 2, 0.38 * inch, str(canvas.getPageNumber()))
+    canvas.drawCentredString(PAGE_W / 2, 0.4 * inch, str(canvas.getPageNumber()))
     canvas.restoreState()
 
 
@@ -106,24 +113,23 @@ def p(text, style):
     return Paragraph(text, style)
 
 
-def fig(path: Path, width: float, caption: str, styles, max_h=3.1 * inch):
+def fig(path: Path, width: float, caption: str, styles, max_h=3.0 * inch):
     if not path.exists():
         return [p(f"[Missing figure: {path.name}]", styles["caption"])]
     from PIL import Image as PILImage
 
     with PILImage.open(path) as im:
-        w, h = im.size
-        aspect = h / float(w)
+        aspect = im.size[1] / float(im.size[0])
     img = Image(str(path), width=width, height=width * aspect)
     img.hAlign = "CENTER"
     if img.drawHeight > max_h:
-        scale = max_h / img.drawHeight
-        img.drawWidth *= scale
-        img.drawHeight *= scale
+        s = max_h / img.drawHeight
+        img.drawWidth *= s
+        img.drawHeight *= s
     return [KeepTogether([img, p(caption, styles["caption"])])]
 
 
-def two_figs(path_a, path_b, w, cap_a, cap_b, styles, max_h=2.7 * inch):
+def two_figs(path_a, path_b, w, cap_a, cap_b, styles, max_h=2.6 * inch):
     from PIL import Image as PILImage
 
     def one(path, width):
@@ -139,17 +145,13 @@ def two_figs(path_a, path_b, w, cap_a, cap_b, styles, max_h=2.7 * inch):
         return img
 
     t = Table(
-        [
-            [one(path_a, w), one(path_b, w)],
-            [p(cap_a, styles["caption"]), p(cap_b, styles["caption"])],
-        ],
-        colWidths=[w + 0.15 * inch, w + 0.15 * inch],
+        [[one(path_a, w), one(path_b, w)],
+         [p(cap_a, styles["caption"]), p(cap_b, styles["caption"])]],
+        colWidths=[w + 0.12 * inch, w + 0.12 * inch],
     )
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
     ]))
     return [t]
 
@@ -160,7 +162,7 @@ def styled_table(data, col_widths):
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c3e50")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.8),
         ("FONTNAME", (0, 1), (-1, -1), "Times-Roman"),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -177,358 +179,459 @@ def build():
     doc = SimpleDocTemplate(
         str(OUTPUT), pagesize=letter,
         leftMargin=LEFT, rightMargin=RIGHT, topMargin=TOP, bottomMargin=BOTTOM,
-        title="Machine Learning–Guided Circularity Prediction for EDM of Metallic Lattice Structures",
+        title="Physics-Informed Machine Learning for Circularity Prediction in Lattice EDM",
         author="Lattice Circularity Analyzer Project",
     )
     story = []
 
     # Title
     story.append(p(
-        "Machine Learning–Guided Circularity Prediction for "
-        "Electrical Discharge Machining of Metallic Lattice Structures",
+        "Physics-Informed Machine Learning for Predicting Supporting-Boundary "
+        "Circularity at Any Tool Position in Micro-EDM of Metallic Lattices",
         styles["title"],
     ))
-    story.append(p("Lattice Circularity Analyzer (LatticeFlow) Project Team", styles["authors"]))
+    story.append(p("Lattice Circularity Analyzer Project Team", styles["authors"]))
     story.append(p(
-        "Research Paper with Experimental Images, Result Graphs, and Final Deliverables",
+        "Research Paper — Ideation, Data Expansion, Training/Validation, and Position-Aware Prediction",
         styles["affiliation"],
     ))
 
     # Abstract
     story.append(p("Abstract", styles["heading1"]))
     story.append(p(
-        "This paper presents a complete experimental and computational study of micro-EDM finishing "
-        "of metallic lattices when a 900&nbsp;µm electrode must open a 235.6&nbsp;µm pore "
-        "(tool/pore = 3.82). Across sixteen laboratory runs with SEM validation, only "
-        "<b>Run&nbsp;4 (4&nbsp;A, 150&nbsp;µs, 80%)</b> produced a continuous, nearly circular "
-        "supporting ring. Hole-deviation metrics alone wrongly favored Run&nbsp;5, which destroys "
-        "supporting material. We report Phase&nbsp;1/Phase&nbsp;2 parameter recommendations, "
-        "Gaussian Process and Gradient Boosting predictors, interactive grid heatmaps, and the "
-        "deployed LatticeFlow web application. Figures include problem diagrams, SEM montages, "
-        "PASS/FAIL software screenshots, and quantitative graphs of circularity, energy, and "
-        "final recommended settings.",
+        "We present a physics-informed machine-learning method that predicts the circularity "
+        "ratio of the supporting material boundary after micro-electrical discharge machining "
+        "(EDM) of a metallic lattice, for <b>any tool landing position</b> (<i>x</i>,&nbsp;<i>y</i>) "
+        "and any EDM recipe (peak current <i>I</i>, pulse-on time <i>T</i>, duty factor <i>D</i>). "
+        "Only sixteen laboratory runs with SEM labels were available. From these, we (i) generated "
+        "1,100 synthetic EDM points via a Gaussian Process posterior over the process inputs, and "
+        "(ii) expanded each labeled run across a spatial landing grid by modulating SEM circularity "
+        "with a geometry-risk penalty, producing hundreds of position-aware training rows. "
+        "Dual Gradient Boosting regressors learn circularity (1–5) and supporting integrity; "
+        "predictions are blended with EDM physics heuristics. Circularity ratio is reported as "
+        "score/5. Leave-one-out and cross-validation guide trust. SEM evidence shows only "
+        "Run&nbsp;4 (4&nbsp;A, 150&nbsp;µs, 80%) yields an intact circular supporting ring — "
+        "the objective the models are trained to maximize.",
         styles["abstract"],
     ))
     story.append(p(
-        "<b>Keywords:</b> EDM; metallic lattice; circularity; SEM; Gaussian process; "
-        "gradient boosting; additive manufacturing post-processing",
+        "<b>Keywords:</b> micro-EDM; lattice structures; circularity ratio; Gaussian process; "
+        "gradient boosting; physics-informed ML; data augmentation; SEM validation",
         styles["keywords"],
     ))
 
-    # 1 Intro
-    story.append(p("1. Introduction and Problem Statement", styles["heading1"]))
+    # 1 Problem
+    story.append(p("1. Problem Definition", styles["heading1"]))
     story.append(p(
-        "Metallic lattices for implants and lightweight structures often need secondary EDM to "
-        "finish pores. When the tool tip is much larger than the pore, sparks attack nodes, "
-        "struts, and openings together. The engineering goal is not merely a round hole number — "
-        "it is a <b>continuous black supporting ring</b> around a nearly circular white opening. "
-        "Nodes may be sacrificed. This project answers: which EDM parameters and landing positions "
-        "achieve that outcome, and how can software predict it before the next SEM trial?",
+        "A metallic lattice has square unit cells of side 500&nbsp;µm. Pore and node diameters "
+        "equal <i>x</i> = 500√2 / 3 ≈ 235.6&nbsp;µm. The EDM tool tip is 900&nbsp;µm "
+        "(tool/pore = 3.82), so the electrode always overlaps pores, nodes, and supporting struts "
+        "together. Success means a nearly circular open region with a <b>continuous supporting "
+        "ring</b>; nodes may be destroyed. Hole-deviation numbers alone are insufficient: among "
+        "sixteen SEM-validated trials, only Run&nbsp;4 produced the desired ring.",
+        styles["body"],
+    ))
+    story.append(p(
+        "The scientific question is therefore: given (<i>I</i>, <i>T</i>, <i>D</i>, <i>x</i>, <i>y</i>), "
+        "predict circularity ratio and whether the supporting boundary survives — even at positions "
+        "never machined in the lab.",
         styles["body"],
     ))
 
-    story.extend(two_figs(
-        ROOT / "PROBLEM STATEMENT 1 LATTICE STRUICTURE.jpeg",
-        ROOT / "LATTICE PROBLEM STATEMENT 2.jpeg",
-        3.35 * inch,
-        "Fig. 1a. Lattice structure, 900 µm tool, and (0,0) node reference.",
-        "Fig. 1b. Phase 1 challenge — tool landing position unknown.",
+    story.extend(fig(
+        FIGS / "fig_geometry_ideation.png",
+        5.6 * inch,
+        "Fig. 1. Ideation schematic: 900 µm tool footprint on a 1500×1500 µm (3×3 cell) working area. "
+        "Any landing position changes strut/node overlap and therefore circularity risk.",
         styles,
+        max_h=3.3 * inch,
     ))
 
-    story.extend(two_figs(
-        ROOT / "SHOWINGIMAGES LATTICE CORRECT IMAGES.jpeg",
-        ROOT / "ACTUAL OUTPUT WE WANT.jpeg",
-        3.35 * inch,
-        "Fig. 2a. Favourable vs unfavourable supporting-boundary outcomes.",
-        "Fig. 2b. Target: continuous circular supporting ring (black).",
-        styles,
-    ))
-
-    # 2 Geometry
-    story.append(p("2. Lattice Geometry", styles["heading1"]))
+    # 2 Ideation / soul of method
+    story.append(p("2. Ideation — The Working Mind of the Solution", styles["heading1"]))
     story.append(p(
-        "Unit cell side <i>a</i> = 500&nbsp;µm. Pore and node diameters equal <i>x</i>, derived from "
-        "the diagonal: <i>a</i>√2 = 3<i>x</i> ⇒ <i>x</i> = 235.6&nbsp;µm. Tool tip = 900&nbsp;µm "
-        "(ratio 3.82). Because the tool exceeds one cell, Phase&nbsp;2 uses a 1500×1500&nbsp;µm "
-        "(3×3 cell) working area.",
+        "The core idea is that circularity is not a property of EDM parameters alone. "
+        "It is the <b>joint effect of process intensity and local lattice geometry under the tool</b>. "
+        "Two landings with identical (<i>I</i>, <i>T</i>, <i>D</i>) can succeed at a pore center and "
+        "fail near a strut because geometry risk changes. Conversely, even a favorable landing "
+        "fails if current is too aggressive. That coupling is the “soul” of the method.",
         styles["body"],
     ))
-    geom = [
-        [p(h, styles["table_header"]) for h in ["Parameter", "Value", "Notes"]],
-        [p("Unit cell", styles["table_cell"]), p("500 µm", styles["table_cell"]), p("SEM scale", styles["table_cell"])],
-        [p("Pore / node Ø", styles["table_cell"]), p("235.6 µm", styles["table_cell"]), p("3x = 500√2", styles["table_cell"])],
-        [p("Tool tip Ø", styles["table_cell"]), p("900 µm", styles["table_cell"]), p("Lab electrode", styles["table_cell"])],
-        [p("Tool/pore ratio", styles["table_cell"]), p("3.82×", styles["table_cell"]), p("Overfills pore", styles["table_cell"])],
-        [p("Working area", styles["table_cell"]), p("1500×1500 µm", styles["table_cell"]), p("3×3 unit cells", styles["table_cell"])],
-    ]
-    story.append(styled_table(geom, [1.8 * inch, 1.5 * inch, 2.2 * inch]))
-    story.append(p("Table 1. Geometry constants used in analysis and software.", styles["caption"]))
-
-    story.extend(two_figs(
-        ROOT / "MEASURMEBN.jpeg",
-        ROOT / "ACTUAL DATSET .png",
-        3.35 * inch,
-        "Fig. 3a. Pore diameter derivation (235.6 µm).",
-        "Fig. 3b. Lattice unit cell with experimental data context.",
-        styles,
+    story.append(p("2.1 Three ideation principles", styles["heading2"]))
+    story.append(p(
+        "<b>Principle 1 — Objective from SEM, not metrology proxies.</b> "
+        "Train to maximize supporting-boundary circularity judged from SEM, not to minimize "
+        "Hole_Dev_Top/Bottom. Run&nbsp;5 looks “best” by deviation but destroys the ring; "
+        "Run&nbsp;4 is the only SEM success.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>Principle 2 — Geometry is a first-class feature.</b> "
+        "Before any ML call, a lattice geometry engine computes how the tool footprint "
+        "intersects nodes, pores, and struts at (<i>x</i>,&nbsp;<i>y</i>). Those quantities "
+        "enter the feature vector beside EDM descriptors.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>Principle 3 — Sparse lab truth + physics-structured expansion.</b> "
+        "Sixteen runs cannot cover every (recipe × position). Expand data by (a) GP sampling "
+        "in EDM space and (b) replaying each SEM label across a landing grid with geometry "
+        "penalties that encode the physical belief “higher strut risk → lower circularity.”",
+        styles["body"],
     ))
 
-    # 3 Experiments
-    story.append(p("3. Experimental Campaign (16 Lab Runs + SEM)", styles["heading1"]))
+    story.extend(fig(
+        FIGS / "fig_ml_pipeline.png",
+        6.3 * inch,
+        "Fig. 2. End-to-end ideation pipeline: sparse SEM truth → dual augmentation → "
+        "physics features + EDM features → Gradient Boosting + heuristic blend → "
+        "circularity ratio at any position.",
+        styles,
+        max_h=3.4 * inch,
+    ))
+
+    # 3 Physics
+    story.append(p("3. Physics Used in the Predictor", styles["heading1"]))
+    story.append(p("3.1 EDM process quantities", styles["heading2"]))
     story.append(p(
-        "Inputs: peak current <i>I</i> ∈ {4,6,8,10}&nbsp;A, pulse-on <i>T</i> ∈ {50,75,100,150}&nbsp;µs, "
-        "duty <i>D</i> ∈ {56,64,72,80}%. Each run was SEM-labeled for boundary circularity (1–5) and "
-        "supporting-boundary integrity. <b>Only Run&nbsp;4 scored 5 with an intact ring.</b>",
+        "From machine settings we compute discharge energy and related intensity terms:",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "<i>E</i> = <i>I</i> · <i>T</i> · (<i>D</i>/100), &nbsp;&nbsp; "
+        "pulse-off ≈ <i>T</i>·(100−<i>D</i>)/<i>D</i>, &nbsp;&nbsp; "
+        "<i>I</i>×<i>D</i>, &nbsp;&nbsp; <i>T</i>/<i>D</i>.",
+        styles["eq"],
+    ))
+    story.append(p(
+        "Physically, low current keeps a small plasma channel; long pulse-on spreads erosion "
+        "more uniformly in the radial direction; high duty sustains continuous removal. "
+        "Heuristics therefore reward <i>I</i> ≤ 5&nbsp;A, <i>T</i> ≥ 130&nbsp;µs, <i>D</i> ≥ 75%, "
+        "and penalize <i>I</i> ≥ 8&nbsp;A (strut blasting).",
+        styles["body"],
+    ))
+
+    story.append(p("3.2 Lattice geometry quantities at a landing", styles["heading2"]))
+    story.append(p(
+        "For tool center (<i>x</i>,&nbsp;<i>y</i>) on a 1500&nbsp;µm working area, the engine evaluates:",
+        styles["body_noindent"],
+    ))
+    story.append(p("• minimum distance to nearest strut and nearest node center;", styles["bullet"]))
+    story.append(p("• counts of nodes/pores inside the tool footprint;", styles["bullet"]))
+    story.append(p("• strut intersection length inside the tool;", styles["bullet"]))
+    story.append(p("• pore and node overlap fractions;", styles["bullet"]))
+    story.append(p("• tool/pore ratio and a scalar <b>geometry risk</b> index:", styles["bullet"]))
+    story.append(p(
+        "geometry_risk = 0.5·strut_risk + 0.3·intersect_risk + 0.2·ratio_factor &nbsp;∈&nbsp;[0,1].",
+        styles["eq"],
+    ))
+    story.append(p(
+        "High geometry risk means the oversized tool is heavily chewing supporting ligaments — "
+        "circularity is expected to fall even if the EDM recipe is gentle.",
+        styles["body"],
+    ))
+
+    # 4 Data
+    story.append(p("4. From 16 Experiments to a Trainable Dataset", styles["heading1"]))
+    story.append(p(
+        "Ground truth consists of sixteen EDM trials labeled from SEM on a 1–5 boundary-circularity "
+        "scale plus a binary supporting-intact flag. Only Run&nbsp;4 scores 5 with an intact ring.",
         styles["body"],
     ))
 
     story.extend(fig(
         ROOT / "ACTUAL IMAGE OF THE 16 DATASETS .png",
-        6.5 * inch,
-        "Fig. 4. SEM images of all 16 EDM experimental outcomes (visual ground truth).",
+        6.4 * inch,
+        "Fig. 3. SEM montage of the sixteen experimental outcomes used as visual ground truth.",
         styles,
-        max_h=3.2 * inch,
+        max_h=3.1 * inch,
     ))
 
-    # Lab photo evidence from experiment folder
-    img_dir = ROOT / "image"
-    lab1 = img_dir / "WhatsApp Image 2026-05-27 at 15.56.00.jpeg"
-    lab2 = img_dir / "WhatsApp Image 2026-05-27 at 15.47.08.jpeg"
-    if lab1.exists() and lab2.exists():
-        story.extend(two_figs(
-            lab1, lab2, 3.35 * inch,
-            "Fig. 4c. Additional laboratory / SEM evidence from experimental campaign.",
-            "Fig. 4d. Supporting experimental imagery used during labeling.",
-            styles, max_h=2.9 * inch,
-        ))
-
-    # Full table compact
     header = [p(h, styles["table_header"]) for h in
-              ["Run", "I", "T", "D", "Dev↑", "Dev↓", "Circ", "OK"]]
-    rows_data = [
-        ("1", "4", "50", "56", "231.6", "213.9", "1", "N"),
-        ("2", "4", "75", "64", "217.8", "199.1", "2", "N"),
-        ("3", "4", "100", "72", "230.2", "212.1", "1", "N"),
-        ("4*", "4", "150", "80", "270.6", "213.0", "5", "Y"),
-        ("5", "6", "50", "64", "205.3", "143.4", "2", "N"),
-        ("6", "6", "75", "56", "225.4", "172.7", "2", "N"),
-        ("7", "6", "100", "80", "280.5", "130.0", "1", "N"),
-        ("8", "6", "150", "72", "219.7", "53.9", "2", "N"),
-        ("9", "8", "50", "72", "240.2", "96.4", "2", "N"),
-        ("10", "8", "75", "80", "260.5", "122.9", "1", "N"),
-        ("11", "8", "100", "56", "240.3", "213.7", "1", "N"),
-        ("12", "8", "150", "64", "213.9", "216.7", "2", "N"),
-        ("13", "10", "50", "80", "238.6", "122.4", "1", "N"),
-        ("14", "10", "75", "72", "251.6", "155.4", "2", "N"),
-        ("15", "10", "100", "64", "227.1", "204.6", "2", "N"),
-        ("16", "10", "150", "56", "231.9", "26.8", "1", "N"),
+              ["Run", "I", "T", "D", "Circ", "Intact", "Role"]]
+    key = [
+        ("4*", "4", "150", "80", "5", "Yes", "SEM success / target"),
+        ("5", "6", "50", "64", "2", "No", "Best deviation, FAIL SEM"),
+        ("1", "4", "50", "56", "1", "No", "Low-energy fail"),
+        ("8", "6", "150", "72", "2", "No", "Asymmetric boundary"),
+        ("13", "10", "50", "80", "1", "No", "High-current blast"),
+        ("16", "10", "150", "56", "1", "No", "Irregular despite low Dev↓"),
     ]
-    table_rows = [header] + [[p(c, styles["table_cell"]) for c in r] for r in rows_data]
-    story.append(styled_table(
-        table_rows,
-        [0.5*inch, 0.45*inch, 0.55*inch, 0.45*inch, 0.65*inch, 0.65*inch, 0.5*inch, 0.4*inch],
-    ))
+    rows = [header] + [[p(c, styles["table_cell"]) for c in r] for r in key]
+    story.append(styled_table(rows, [0.55*inch, 0.5*inch, 0.55*inch, 0.5*inch, 0.55*inch, 0.65*inch, 2.2*inch]))
+    story.append(p("Table 1. Representative labeled runs (* = only SEM success).", styles["caption"]))
+
+    story.append(p("4.1 Augmentation A — Gaussian Process synthetic EDM points (1,100)", styles["heading2"]))
     story.append(p(
-        "Table 2. Complete 16-run matrix (* = only SEM success). Units: A, µs, %, µm.",
-        styles["caption"],
+        "A Gaussian Process was fit on the sixteen real (<i>I</i>, <i>T</i>, <i>D</i>) → response "
+        "mappings (hole deviations / related process outputs). Sampling the GP posterior inside "
+        "the experimental bounds generated <b>1,100 synthetic points</b> "
+        "(file <font face='Courier'>synthetic_1100_points.csv</font>, source tag "
+        "<font face='Courier'>GP_posterior</font>). These densify EDM-parameter space for "
+        "exploratory Phase&nbsp;1 models. They are <b>not</b> new laboratory experiments; final "
+        "SEM-anchored recommendations still privilege the sixteen real labels.",
+        styles["body"],
     ))
 
-    # Graphs from experiments
-    story.append(p("4. Result Graphs from the Experiments", styles["heading1"]))
+    story.append(p("4.2 Augmentation B — Spatial expansion of SEM labels (position-aware rows)", styles["heading2"]))
     story.append(p(
-        "The graphs below are computed directly from <font face='Courier'>original_16_runs.csv</font> "
-        "and <font face='Courier'>run_visual_labels.csv</font>. They quantify the SEM paradox and "
-        "the final recommended parameter island.",
+        "To predict circularity at arbitrary (<i>x</i>,&nbsp;<i>y</i>), each of the 16 SEM labels "
+        "is replayed on a discrete landing grid inside the valid tool-center bounds "
+        "(step ≈ 150&nbsp;µm → 25 landings → <b>≈ 400 training rows</b>). For landing geometry "
+        "features <i>g</i> and SEM circularity <i>c</i><sub>SEM</sub> of that run:",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "<i>c</i><sub>train</sub> = clip( <i>c</i><sub>SEM</sub> − 2.5·geometry_risk(<i>g</i>) + edm_bonus(<i>I,T,D</i>) , 1, 5 ).",
+        styles["eq"],
+    ))
+    story.append(p(
+        "Here <i>edm_bonus</i> is +0.5 for gentle recipes (<i>I</i>≤5, <i>T</i>≥130, <i>D</i>≥75), "
+        "−1.0 for <i>I</i>≥8, else 0. Supporting-integrity targets are set to 0 when current is "
+        "high or geometry risk is large. This encodes the ideation that the same recipe degrades "
+        "when the tool sits on dense strut intersections.",
+        styles["body"],
+    ))
+
+    story.extend(fig(
+        FIGS / "fig_data_expansion.png",
+        6.2 * inch,
+        "Fig. 4. Data-expansion path: 16 SEM-labeled runs → grid landings → geometry-modulated "
+        "targets → models that generalize to unseen positions.",
+        styles,
+        max_h=2.4 * inch,
+    ))
+
+    # 5 ML
+    story.append(p("5. Machine Learning Models, Training, Testing, Validation", styles["heading1"]))
+    story.append(p("5.1 Feature vector (20 dimensions)", styles["heading2"]))
+    story.append(p(
+        "<b>EDM block (7):</b> <i>I</i>, <i>T</i>, <i>D</i>, energy <i>E</i>, pulse-off proxy, "
+        "<i>I</i>×<i>D</i>, <i>T</i>/<i>D</i>. "
+        "<b>Geometry block (13):</b> normalized (<i>x</i>,&nbsp;<i>y</i>), min distances to strut/node, "
+        "nodes/pores inside tool, strut intersection length, pore/node overlap fractions, "
+        "geometry risk, tool/pore ratio, working area, tool diameter.",
+        styles["body"],
+    ))
+
+    story.append(p("5.2 Model architecture", styles["heading2"]))
+    story.append(p(
+        "Two supervised Gradient Boosting regressors (scikit-learn):",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "• Circularity model: 120 estimators, max depth 4 → score ∈ [1, 5].",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "• Supporting-integrity model: 80 estimators, max depth 3 → continuous score thresholded at 0.5.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "Phase&nbsp;1 (position-unknown) also uses a Gaussian Process Regressor with Matérn&nbsp;5/2 "
+        "+ WhiteKernel on the 16 SEM circularity labels to search favorable (<i>I</i>, <i>T</i>, <i>D</i>) "
+        "neighborhoods, and a polynomial Ridge model under leave-one-out cross-validation (LOOCV).",
+        styles["body"],
+    ))
+
+    story.append(p("5.3 Train / test / validate protocol", styles["heading2"]))
+    story.append(p(
+        "<b>Training set (position-aware):</b> geometry-expanded rows from all 16 runs "
+        "(≈400 samples at 150&nbsp;µm grid). Models are fit on the full expanded matrix and persisted.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>Validation (small-n honest checks):</b> LOOCV on the 16 real SEM circularity labels "
+        "for Phase&nbsp;1 Ridge/GP analysis yields MAE ≈ 1.02 on the 1–5 circularity scale. "
+        "For exploratory 16+synthetic models, 5-fold cross-validated MAE on hole-deviation "
+        "responses monitors overfitting in EDM space. Because the labeled set is tiny and "
+        "unbalanced (one clear success), validation metrics are decision-support, not proof of "
+        "industrial accuracy — SEM remains the ultimate test. Models are therefore always "
+        "interpreted relative to the Run&nbsp;4 reference island rather than as absolute oracles.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>Physics blend at inference (test-time regularization):</b> "
+        "final circularity = (1−<i>w</i>)·ML + <i>w</i>·heuristic, where weight <i>w</i> grows "
+        "when tool/pore sizes drift from the lab geometry (900&nbsp;µm / 235.6&nbsp;µm), "
+        "capped near 0.7. When drift is large, supporting integrity also defers more to the "
+        "heuristic. This prevents pure ML hallucination far from the training manifold while "
+        "still letting Gradient Boosting dominate near the lab configuration.",
+        styles["body"],
+    ))
+    story.append(p(
+        "<b>What “testing” means here:</b> a held-out industrial test set does not exist yet "
+        "(only one SEM success). Instead we (i) check LOOCV on the 16 labels, (ii) verify that "
+        "grid predictions peak at low-risk pore-centered landings for Run&nbsp;4-like recipes, "
+        "(iii) verify that high-current recipes stay FAIL across the grid, and (iv) confirm "
+        "GP search returns candidates near 4&nbsp;A / 150&nbsp;µs / 80%. Those qualitative "
+        "consistency tests are part of the validation story for sparse experimental ML.",
+        styles["body"],
+    ))
+
+    ml_table = [
+        [p(h, styles["table_header"]) for h in ["Stage", "Data", "Method", "Purpose"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Phase 1 fit", "16 SEM labels", "GP (Matérn 5/2)", "Search robust (I,T,D)"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Phase 1 CV", "16 runs LOOCV", "Polynomial Ridge", "Estimate circularity MAE"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Synthetic densify", "GP posterior", "1,100 points", "Fill EDM input space"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Spatial expand", "16 × ~25 landings", "Risk-modulated labels", "Teach position effect"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Position model", "~400 rows / 20 feats", "GBR 120 + GBR 80", "Circularity & support"]],
+        [p(c, styles["table_cell"]) for c in [
+            "Inference", "Any (I,T,D,x,y)", "ML + heuristic blend", "Ratio = score/5"]],
+    ]
+    story.append(styled_table(ml_table, [1.15*inch, 1.45*inch, 1.55*inch, 1.85*inch]))
+    story.append(p("Table 2. Training, validation, and inference stack.", styles["caption"]))
+
+    # 6 How prediction works for any position
+    story.append(p("6. Predicting Circularity Ratio for Any Position", styles["heading1"]))
+    story.append(p(
+        "Given a query (<i>I</i>, <i>T</i>, <i>D</i>, <i>x</i>, <i>y</i>):",
+        styles["body_noindent"],
+    ))
+    story.append(p(
+        "1. Run the geometry engine at (<i>x</i>,&nbsp;<i>y</i>) → risk and overlap features.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "2. Build the 20-D feature row (EDM + geometry).",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "3. Predict ML circularity score <i>c</i><sub>ML</sub> ∈ [1,5] and supporting flag.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "4. Evaluate physics heuristic <i>c</i><sub>H</sub> from the gentle/aggressive rules and risk.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "5. Blend: <i>c</i> = (1−<i>w</i>)·<i>c</i><sub>ML</sub> + <i>w</i>·<i>c</i><sub>H</sub>.",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "6. Report <b>circularity ratio</b> = <i>c</i> / 5. PASS if <i>c</i> ≥ 3.5 and supporting intact "
+        "and geometry risk ≤ 0.55 (software gates used for engineering decisions).",
+        styles["bullet"],
+    ))
+    story.append(p(
+        "Scanning many (<i>x</i>,&nbsp;<i>y</i>) on a fine grid yields a spatial circularity field for "
+        "fixed EDM settings — the practical realization of the ideation that position matters.",
+        styles["body"],
+    ))
+
+    # 7 Results graphs
+    story.append(p("7. Experimental Evidence and Learned Patterns", styles["heading1"]))
+    story.append(p(
+        "Graphs below are computed from the sixteen real runs and SEM labels. They justify "
+        "why the training objective and heuristics look the way they do.",
         styles["body_noindent"],
     ))
 
-    story.extend(fig(
+    story.extend(two_figs(
         FIGS / "fig_circularity_by_run.png",
-        6.2 * inch,
-        "Fig. 5. SEM circularity score by run — only Run 4 (green) passes the supporting-ring test.",
-        styles,
-        max_h=3.0 * inch,
-    ))
-    story.extend(fig(
         FIGS / "fig_pass_fail_pie.png",
-        4.2 * inch,
-        "Fig. 6. Outcome summary: 1 PASS / 15 FAIL among 16 SEM-validated EDM trials.",
+        3.3 * inch,
+        "Fig. 5a. SEM circularity by run (only Run 4 passes).",
+        "Fig. 5b. 1 PASS / 15 FAIL supporting-ring outcomes.",
         styles,
-        max_h=2.8 * inch,
+        max_h=2.55 * inch,
     ))
 
     story.extend(fig(
         FIGS / "fig_deviation_vs_circularity.png",
-        6.2 * inch,
-        "Fig. 7. Critical paradox: Run 5 has better hole-deviation numbers but fails SEM; "
-        "Run 4 has higher deviation yet is the only circular supporting boundary.",
-        styles,
-        max_h=3.2 * inch,
-    ))
-
-    story.extend(fig(
-        FIGS / "fig_energy_vs_circularity.png",
         6.0 * inch,
-        "Fig. 8. Discharge energy E = I·T·(D/100) versus SEM circularity (Run 4 highlighted by success).",
+        "Fig. 6. Why the ML target is SEM circularity: Run 5 (low deviation) fails; "
+        "Run 4 (higher deviation) is the only circular supporting boundary.",
         styles,
-        max_h=2.9 * inch,
+        max_h=3.1 * inch,
     ))
-    story.extend(fig(
+
+    story.extend(two_figs(
+        FIGS / "fig_energy_vs_circularity.png",
         FIGS / "fig_current_pulse_heatmap.png",
-        5.8 * inch,
-        "Fig. 9. Mean SEM circularity heatmap across Peak Current × Pulse-on Time.",
+        3.3 * inch,
+        "Fig. 7a. Energy E=I·T·(D/100) vs SEM circularity.",
+        "Fig. 7b. Mean circularity: Current × Pulse-on.",
         styles,
-        max_h=2.9 * inch,
-    ))
-
-    # Methodology + software
-    story.append(p("5. Methodology and Software System", styles["heading1"]))
-    story.append(p(
-        "<b>Phase 1 (unknown position):</b> maximize SEM circularity using Gaussian Process "
-        "(Matérn 5/2 + WhiteKernel) over (<i>I</i>, <i>T</i>, <i>D</i>) with LOOCV Ridge checks. "
-        "<b>Phase 2 (known x,y):</b> lattice geometry engine computes strut/node distances, overlaps, "
-        "and risk; Gradient Boosting predicts circularity and supporting integrity, blended with "
-        "physics heuristics (favor <i>I</i>≤5&nbsp;A, <i>T</i>≥130&nbsp;µs, <i>D</i>≥75%).",
-        styles["body"],
-    ))
-    story.append(p(
-        "<b>LatticeFlow web app</b> (Flask): single-point analysis, full-grid circularity heatmap, "
-        "AI-recommended best position, PASS/FAIL report, LLM engineering assistant, multi-shape "
-        "tool analysis. Deployed on Render.com.",
-        styles["body"],
-    ))
-
-    story.extend(two_figs(
-        ROOT / "assets" / "Grid Scan For Circularity.png",
-        ROOT / "assets" / "Grid Scan For Best Recoomended Position By AI.png",
-        3.35 * inch,
-        "Fig. 10a. Software: grid scan for circularity.",
-        "Fig. 10b. Software: AI-recommended best landing position.",
-        styles,
-    ))
-
-    story.extend(two_figs(
-        ROOT / "assets" / "Pass Circularity With Image Position.png",
-        ROOT / "assets" / "Fail Circularity With Image Position.png",
-        3.35 * inch,
-        "Fig. 11a. PASS example — circularity meets thresholds.",
-        "Fig. 11b. FAIL example — supporting boundary destroyed / risk high.",
-        styles,
-    ))
-
-    story.extend(two_figs(
-        ROOT / "assets" / "Detailed Engineering Report.png",
-        ROOT / "assets" / "Ai Engineering Assistant.png",
-        3.35 * inch,
-        "Fig. 12a. Auto-generated engineering report.",
-        "Fig. 12b. AI engineering assistant for explanations.",
-        styles,
+        max_h=2.55 * inch,
     ))
 
     story.append(p(
-        "Additional ideation artifacts document the grid-subdivision logic used for Phase&nbsp;2: "
-        "the working area is tiled into 500&nbsp;µm cells, and intersection / landing points become "
-        "prediction targets for the circularity map. This bridges notebook planning and the "
-        "deployed heatmap scanner.",
+        "The learned neighborhood around Run&nbsp;4 — low <i>I</i>, long <i>T</i>, high <i>D</i> — "
+        "matches both SEM truth and GP search recommendations (predicted circularity ≈ 4.6–4.9 "
+        "near 3.6–4.8&nbsp;A / ≈150&nbsp;µs / ≈79–80%). Near-strut landings need slightly softer "
+        "current (≈3.5&nbsp;A) because geometry risk is higher.",
         styles["body"],
     ))
-    story.extend(two_figs(
-        ROOT / "llm project ideation page 2.jpeg",
-        ROOT / "llm project 3 ideation page 1.jpeg",
-        3.35 * inch,
-        "Fig. 13a. Project overview — 500 µm unit cell and grid logic.",
-        "Fig. 13b. Grid subdivision idea for ML circularity mapping.",
+
+    story.extend(fig(
+        FIGS / "fig_final_recommendations.png",
+        6.0 * inch,
+        "Fig. 8. Final recommended parameter island from the SEM-informed analysis "
+        "(Phase 1 unknown position; Phase 2 by zone).",
         styles,
         max_h=2.8 * inch,
     ))
 
-    # Final answers
-    story.append(p("6. What We Finally Achieved — Final Answers", styles["heading1"]))
-    story.append(p(
-        "After comparing deviation-only ranking against SEM truth, the project’s final answers are:",
-        styles["body_noindent"],
-    ))
-    story.append(p("• <b>Phase 1 (position unknown), WITH SEM:</b> 4&nbsp;A, 150&nbsp;µs, 80% (Run 4) — PRIMARY.", styles["bullet"]))
-    story.append(p("• <b>Phase 1 WITHOUT SEM (wrong):</b> 6&nbsp;A, 50&nbsp;µs, 64% (Run 5) — do not use for supporting ring.", styles["bullet"]))
-    story.append(p("• <b>Phase 2 pore center / mid pore:</b> 4&nbsp;A, ~148–150&nbsp;µs, 79–80%.", styles["bullet"]))
-    story.append(p("• <b>Phase 2 near strut / near node:</b> 3.5&nbsp;A, 145–150&nbsp;µs, 76–78%.", styles["bullet"]))
-    story.append(p("• <b>Machine extras:</b> very fine servo feed, stable gap, continuous flush, dressed 900&nbsp;µm electrode.", styles["bullet"]))
-    story.append(p("• <b>PASS gates in software:</b> score ≥3.5/5, ratio ≥0.70, supporting intact, geometry risk ≤0.55.", styles["bullet"]))
-
-    story.extend(fig(
-        FIGS / "fig_final_recommendations.png",
-        6.1 * inch,
-        "Fig. 14. Final recommended EDM parameters for Phase 1 and Phase 2 zones "
-        "(scaled bars for comparison).",
-        styles,
-        max_h=2.9 * inch,
-    ))
-
+    # 8 Final answers
+    story.append(p("8. Final Answers Produced by This Process", styles["heading1"]))
     rec = [
-        [p(h, styles["table_header"]) for h in ["Case", "Zone", "I (A)", "T (µs)", "D (%)", "Status"]],
-        [p(c, styles["table_cell"]) for c in ["Phase 1 + SEM", "Unknown", "4", "150", "80", "FINAL"]],
-        [p(c, styles["table_cell"]) for c in ["Phase 1 − SEM", "Unknown", "6", "50", "64", "REJECT"]],
-        [p(c, styles["table_cell"]) for c in ["Phase 2 + SEM", "Center", "4", "150", "80", "FINAL"]],
-        [p(c, styles["table_cell"]) for c in ["Phase 2 + SEM", "Near strut", "3.5", "150", "78", "FINAL"]],
-        [p(c, styles["table_cell"]) for c in ["Phase 2 + SEM", "Near node", "3.5", "145", "76", "FINAL"]],
+        [p(h, styles["table_header"]) for h in ["Case", "Zone", "I (A)", "T (µs)", "D (%)", "Basis"]],
+        [p(c, styles["table_cell"]) for c in ["Phase 1", "Unknown pos.", "4", "150", "80", "SEM Run 4 + GP"]],
+        [p(c, styles["table_cell"]) for c in ["Phase 1 reject", "Dev-only opt.", "6", "50", "64", "Fails SEM ring"]],
+        [p(c, styles["table_cell"]) for c in ["Phase 2", "Pore center", "4", "150", "80", "Low geom. risk"]],
+        [p(c, styles["table_cell"]) for c in ["Phase 2", "Near strut", "3.5", "150", "78", "Higher geom. risk"]],
+        [p(c, styles["table_cell"]) for c in ["Phase 2", "Near node", "3.5", "145", "76", "Corner overlap"]],
     ]
-    story.append(styled_table(rec, [1.2*inch, 1.0*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.8*inch]))
-    story.append(p("Table 3. Final project answers (SEM-validated).", styles["caption"]))
+    story.append(styled_table(rec, [1.1*inch, 1.15*inch, 0.7*inch, 0.75*inch, 0.7*inch, 1.3*inch]))
+    story.append(p("Table 3. Final parameter answers from the ML/physics process.", styles["caption"]))
 
-    story.append(p("6.1 Deliverables completed in this project", styles["heading2"]))
-    story.append(p("1. Geometry derivation and lattice constants file (<font face='Courier'>data/lattice_geometry.csv</font>).", styles["bullet"]))
-    story.append(p("2. Curated 16-run lab dataset + SEM visual labels.", styles["bullet"]))
-    story.append(p("3. Phase 1 GP/Ridge analysis on real runs only (<font face='Courier'>phase1_model_actual.py</font>).", styles["bullet"]))
-    story.append(p("4. Phase 2 geometry engine + Gradient Boosting circularity predictor.", styles["bullet"]))
-    story.append(p("5. Interactive LatticeFlow website: analyze, heatmap, AI best position, reports, chat.", styles["bullet"]))
-    story.append(p("6. Recommended next trials around Run 4 (<font face='Courier'>data/recommended_trials.csv</font>).", styles["bullet"]))
-    story.append(p("7. This research paper with experimental images and quantitative graphs.", styles["bullet"]))
-
-    story.append(p("6.2 Why Run 4 works (final physical interpretation)", styles["heading2"]))
     story.append(p(
-        "Run&nbsp;4 delivers discharge energy <i>E</i> = 4 × 150 × 0.80 = 480 units — about 2.5× "
-        "Run&nbsp;5’s 192 units — but the energy is spread gently: a small plasma channel (low current), "
-        "long radially uniform erosion (long pulse-on), and steady removal (high duty). Aggressive "
-        "short pulses at mid/high current blast thin struts before a ring can form. Therefore the "
-        "final recipe is not “minimum energy” and not “minimum hole deviation”; it is "
-        "<b>controlled, symmetric, continuous erosion</b> that leaves the supporting material as a circle.",
+        "Prediction outputs for any query position: circularity score (1–5), "
+        "<b>circularity ratio = score/5</b>, supporting-material integrity, geometry risk, "
+        "and PASS/FAIL against the thresholds score ≥ 3.5, ratio ≥ 0.70, supporting intact, "
+        "risk ≤ 0.55.",
         styles["body"],
     ))
 
-    # Conclusion
-    story.append(p("7. Conclusion", styles["heading1"]))
+    # 9 Conclusion
+    story.append(p("9. Conclusion", styles["heading1"]))
     story.append(p(
-        "SEM — not hole-deviation — decides success for oversized-tool EDM on lattices. "
-        "The winning pattern is <b>low current + long pulse-on + high duty</b> (Run&nbsp;4). "
-        "Near struts/nodes, slightly softer current (3.5&nbsp;A) protects ligaments. "
-        "LatticeFlow turns these findings into position-aware predictions and shop-floor guidance. "
-        "Next highest-value work: more SEM trials in the 3.5–4.5&nbsp;A / 140–150&nbsp;µs / 76–80% island.",
-        styles["body"],
-    ))
-    story.append(p(
-        "In summary, this project closed the loop from laboratory SEM evidence → correct objective "
-        "function → Phase&nbsp;1/2 parameter answers → geometry-aware ML → interactive web tool → "
-        "documented research paper with graphs. The practical takeaway for manufacturing is clear: "
-        "use Run&nbsp;4 settings first, soften near struts, and trust supporting-ring circularity over "
-        "scalar hole-deviation scores.",
+        "This work shows how a sparse SEM-labeled EDM campaign can still support "
+        "position-aware circularity prediction. The ideation is simple but decisive: "
+        "<b>couple process physics with lattice geometry, expand 16 labels through GP "
+        "synthesis and risk-modulated spatial replay, train Gradient Boosting, and "
+        "regularize with heuristics at inference</b>. That is how circularity ratio becomes "
+        "computable for any tool position — not by collecting thousands of new SEM trials, "
+        "but by teaching the model the geometry–process interaction that SEM revealed.",
         styles["body"],
     ))
 
     story.append(p("References", styles["heading1"]))
     for r in [
-        "[1] Ho, K. H., &amp; Newman, S. T. (2003). State of the art electrical discharge machining (EDM). <i>Int. J. Machine Tools &amp; Manufacture</i>.",
-        "[2] Kunieda, M., et al. (2005). Advancing EDM through fundamental insight. <i>CIRP Annals</i>.",
+        "[1] Ho, K. H., &amp; Newman, S. T. (2003). State of the art electrical discharge machining (EDM). "
+        "<i>Int. J. Machine Tools &amp; Manufacture</i>.",
+        "[2] Kunieda, M., et al. (2005). Advancing EDM through fundamental insight into the process. "
+        "<i>CIRP Annals</i>.",
         "[3] Rasmussen, C. E., &amp; Williams, C. K. I. (2006). <i>Gaussian Processes for Machine Learning</i>. MIT Press.",
-        "[4] Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. <i>Annals of Statistics</i>.",
-        "[5] Gibson, I., Rosen, D., &amp; Stucker, B. (2021). <i>Additive Manufacturing Technologies</i>. Springer.",
-        "[6] Lattice Circularity Analyzer (2026). Lab dataset, SEM labels, LatticeFlow modules — "
-        "GitHub: shekharaj0007/Lattice-Circularity-Analyzer.",
+        "[4] Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. "
+        "<i>Annals of Statistics</i>.",
+        "[5] Lattice Circularity Analyzer Project (2026). Internal modules: "
+        "<font face='Courier'>lattice_geometry_engine.py</font>, "
+        "<font face='Courier'>circularity_predictor.py</font>, "
+        "<font face='Courier'>phase1_model_actual.py</font>; datasets: "
+        "<font face='Courier'>original_16_runs.csv</font>, "
+        "<font face='Courier'>run_visual_labels.csv</font>, "
+        "<font face='Courier'>synthetic_1100_points.csv</font>.",
     ]:
         story.append(p(r, styles["ref"]))
 
     doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
-
     from pypdf import PdfReader
     n = len(PdfReader(str(OUTPUT)).pages)
     print(f"Saved: {OUTPUT} ({n} pages)")
