@@ -5,10 +5,21 @@ import json
 from .groq_client import InstrumentedGroqClient
 from .embeddings import EmbeddingEngine
 from .rate_limiter import RateLimiter, TokenBudgetTracker
+from .citations import CitationExtractor
+from .evidence_gate import EvidenceGate
 
 
 class Pipeline:
-    """4-stage pipeline: Intent → Retrieval → Generation → Verification."""
+    """
+    4-stage pipeline with evidence gate: Intent → Retrieval → [Evidence Gate] → Generation → Verification
+    
+    Evidence gate skips generation when evidence is weak, saving tokens.
+    Citations verified deterministically for correctness.
+    """
+    
+    # Prompt size caps (tokens)
+    MAX_PROMPT_TOKENS = 4000
+    MAX_CONTEXT_CHARS = 3000  # Approximate token limit for context
     
     def __init__(self, 
                  groq_client: InstrumentedGroqClient,
@@ -21,9 +32,11 @@ class Pipeline:
                  max_retries: int = 1,
                  intent_client: Optional[InstrumentedGroqClient] = None,
                  generation_client: Optional[InstrumentedGroqClient] = None,
-                 verification_client: Optional[InstrumentedGroqClient] = None):
+                 verification_client: Optional[InstrumentedGroqClient] = None,
+                 evidence_gate_enabled: bool = True,
+                 citation_verification_enabled: bool = True):
         """
-        Initialize pipeline with strategic model sizing.
+        Initialize pipeline with strategic model sizing and correctness features.
         
         Args:
             groq_client: Default client (used as fallback)
@@ -33,10 +46,12 @@ class Pipeline:
             chunks: Document chunks
             top_k: Number of chunks to retrieve
             rerank: Enable re-ranking
-            max_retries: Max retry attempts
+            max_retries: Max retry attempts (2 verify failures = refusal)
             intent_client: Small/fast model for intent classification (optional)
             generation_client: Large/capable model for generation (optional)
             verification_client: Small/fast model for verification (optional)
+            evidence_gate_enabled: Enable evidence gate (skip generation when evidence weak)
+            citation_verification_enabled: Enable citation verification
         """
         # Default client (fallback)
         self.groq = groq_client
@@ -54,6 +69,12 @@ class Pipeline:
         self.rerank = rerank
         self.max_retries = max_retries
         
+        # Correctness features
+        self.evidence_gate_enabled = evidence_gate_enabled
+        self.citation_verification_enabled = citation_verification_enabled
+        self.evidence_gate = EvidenceGate()
+        self.citation_extractor = CitationExtractor()
+        
         # Track which models are used for each stage
         self.model_config = {
             "intent": self.intent_client.model,
@@ -67,9 +88,12 @@ class Pipeline:
         self.failed_queries = 0
         self.budget_refusals = 0
         self.retry_count = 0
+        self.evidence_gate_refusals = 0  # Early refusals (no generation)
+        self.citation_failures = 0  # Failed citation verification
         self.stage_timings = {
             "intent": [],
             "retrieval": [],
+            "evidence_gate": [],
             "generation": [],
             "verification": []
         }
@@ -130,6 +154,44 @@ class Pipeline:
             retrieval_result = self._stage_retrieval(query, intent_result["intent_type"])
             log_entry["stages"]["retrieval"] = retrieval_result
             
+            # Stage 2.5: Evidence Gate (skip generation if evidence weak)
+            if self.evidence_gate_enabled:
+                evidence_start = time.time()
+                should_proceed, reason, evidence_meta = self.evidence_gate.assess_evidence(
+                    retrieval_result["context"], query
+                )
+                evidence_latency = time.time() - evidence_start
+                self.stage_timings["evidence_gate"].append(evidence_latency)
+                
+                log_entry["stages"]["evidence_gate"] = {
+                    "latency": evidence_latency,
+                    "decision": evidence_meta["decision"],
+                    "reason": reason,
+                    **evidence_meta
+                }
+                
+                if not should_proceed:
+                    # Early refusal - save tokens by not generating
+                    self.evidence_gate_refusals += 1
+                    self.failed_queries += 1
+                    log_entry["refusal_reason"] = "weak_evidence"
+                    log_entry["tokens_saved"] = 400  # Estimated generation cost
+                    self.query_log.append(log_entry)
+                    
+                    return {
+                        "success": False,  # Refusals never count as success
+                        "refusal": True,
+                        "refusal_reason": reason,
+                        "evidence_metadata": evidence_meta,
+                        "query_id": query_id,
+                        "timings": {
+                            "intent": intent_result["latency"],
+                            "retrieval": retrieval_result["latency"],
+                            "evidence_gate": evidence_latency,
+                            "total": time.time() - start_time
+                        }
+                    }
+            
             # Stage 3: Generation
             generation_result = self._stage_generation(query, retrieval_result["context"])
             log_entry["stages"]["generation"] = generation_result
@@ -150,9 +212,12 @@ class Pipeline:
             )
             log_entry["stages"]["verification"] = verification_result
             
-            # Retry logic
+            # Retry logic with two-strike rule
+            verification_attempts = 1
             if not verification_result["verified"] and self.max_retries > 0:
                 self.retry_count += 1
+                verification_attempts += 1
+                
                 retry_result = self._retry_generation(
                     query,
                     retrieval_result["context"],
@@ -170,6 +235,29 @@ class Pipeline:
                         retrieval_result["context"]
                     )
                     log_entry["stages"]["verification_retry"] = verification_result
+                    
+                    # Two-strike rule: two verify failures = refusal
+                    if not verification_result["verified"]:
+                        self.failed_queries += 1
+                        self.citation_failures += 1
+                        log_entry["refusal_reason"] = "two_verify_failures"
+                        self.query_log.append(log_entry)
+                        
+                        return {
+                            "success": False,  # Refusals never count as success
+                            "refusal": True,
+                            "refusal_reason": "Answer failed verification twice. Cannot provide verified answer.",
+                            "verification_attempts": verification_attempts,
+                            "issues": verification_result["issues"],
+                            "query_id": query_id,
+                            "timings": {
+                                "intent": intent_result["latency"],
+                                "retrieval": retrieval_result["latency"],
+                                "generation": generation_result["latency"],
+                                "verification": verification_result["latency"],
+                                "total": time.time() - start_time
+                            }
+                        }
             
             # Update budget with actual tokens
             total_tokens = sum(
@@ -282,26 +370,55 @@ class Pipeline:
         }
     
     def _stage_generation(self, query: str, context: List[Dict]) -> Dict:
-        """Stage 3: Generate answer from context."""
+        """Stage 3: Generate answer from context with prompt size caps."""
         start_time = time.time()
         
-        # Build context string
-        context_str = "\n\n".join([
-            f"[Source {i+1}]: {chunk['text'][:500]}" 
-            for i, chunk in enumerate(context[:5])
-        ])
+        # Build context string with size cap
+        context_parts = []
+        context_char_count = 0
         
-        # Estimate tokens
-        estimated_tokens = len(context_str.split()) + len(query.split()) + 300
+        for i, chunk in enumerate(context[:5]):  # Max 5 chunks
+            chunk_text = chunk['text'][:500]  # Max 500 chars per chunk
+            
+            # Check if adding this chunk would exceed limit
+            if context_char_count + len(chunk_text) > self.MAX_CONTEXT_CHARS:
+                # Truncate to fit
+                remaining = self.MAX_CONTEXT_CHARS - context_char_count
+                if remaining > 100:  # Only add if substantial space left
+                    chunk_text = chunk_text[:remaining]
+                    context_parts.append(f"[Chunk c{chunk['id']}]: {chunk_text}...")
+                break
+            
+            context_parts.append(f"[Chunk c{chunk['id']}]: {chunk_text}")
+            context_char_count += len(chunk_text)
+        
+        context_str = "\n\n".join(context_parts)
+        
+        # Estimate tokens (rough: 1 token ≈ 4 chars)
+        estimated_prompt_tokens = len(context_str) // 4 + len(query) // 4 + 100
+        estimated_tokens = estimated_prompt_tokens + 400  # + max_tokens
         
         # Wait for rate limit
         wait_time = self.rate_limiter.acquire(estimated_tokens=estimated_tokens)
         if wait_time > 0:
             time.sleep(wait_time)
         
+        system_prompt = """You are a helpful assistant. Answer based ONLY on the provided context.
+Include citations in format: [Paper vN, p.PAGE, chunk cID]
+Example: The transformer uses attention [Attention Is All You Need v7, p.3, chunk c1].
+If context doesn't answer the question, say so."""
+        
+        # Enforce prompt size cap
+        user_content = f"Context:\n{context_str}\n\nQuestion: {query}\n\nAnswer:"
+        if len(system_prompt) + len(user_content) > self.MAX_PROMPT_TOKENS * 4:  # Approximate
+            # Truncate context further
+            max_context_len = self.MAX_PROMPT_TOKENS * 4 - len(system_prompt) - len(query) - 200
+            context_str = context_str[:max_context_len]
+            user_content = f"Context:\n{context_str}\n\nQuestion: {query}\n\nAnswer:"
+        
         messages = [
-            {"role": "system", "content": "You are a helpful assistant. Answer the question based on the provided context. Be concise and accurate. If the context doesn't contain enough information, say so."},
-            {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}\n\nAnswer:"}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
         ]
         
         # Use large/capable model for generation (the hard task)
@@ -318,16 +435,53 @@ class Pipeline:
         }
     
     def _stage_verification(self, query: str, answer: str, context: List[Dict]) -> Dict:
-        """Stage 4: Verify answer quality."""
+        """Stage 4: Verify answer quality with citation checking."""
         start_time = time.time()
         
+        issues = []
+        verified = False
+        score = 5
+        
+        # First: Deterministic citation verification (fast, reliable)
+        if self.citation_verification_enabled:
+            citations = self.citation_extractor.extract_citations(answer)
+            
+            if citations:
+                citations_valid, citation_issues = self.citation_extractor.verify_citations(
+                    answer, citations, context
+                )
+                
+                if not citations_valid:
+                    issues.extend(citation_issues)
+                    verified = False
+                    score = 3
+                else:
+                    # Citations valid, check for fabricated quotes
+                    quotes_valid, quote_issue = self.citation_extractor.verify_no_fabrication(
+                        answer, context
+                    )
+                    if not quotes_valid:
+                        issues.append(quote_issue)
+                        verified = False
+                        score = 4
+                    else:
+                        # All deterministic checks passed
+                        verified = True
+                        score = 8
+            else:
+                # No citations found
+                issues.append("No citations found in answer")
+                verified = False
+                score = 4
+        
+        # Second: LLM-based verification (for additional quality checks)
         # Wait for rate limit
         wait_time = self.rate_limiter.acquire(estimated_tokens=200)
         if wait_time > 0:
             time.sleep(wait_time)
         
         messages = [
-            {"role": "system", "content": "You are a verification assistant. Rate the answer's quality on a scale of 1-10. Check: (1) Relevance to question, (2) Accuracy based on context, (3) Completeness. Respond with: SCORE: X\nVERIFIED: YES/NO\nISSUES: (list any issues)"},
+            {"role": "system", "content": "You are a verification assistant. Check: (1) Relevance to question, (2) Completeness. Rate quality 1-10. Respond: SCORE: X\nRELEVANT: YES/NO\nISSUES: (list any)"},
             {"role": "user", "content": f"Question: {query}\n\nAnswer: {answer}\n\nVerification:"}
         ]
         
@@ -337,24 +491,31 @@ class Pipeline:
         latency = time.time() - start_time
         self.stage_timings["verification"].append(latency)
         
-        # Parse verification
-        verified = False
-        score = 5
-        issues = []
-        
+        # Parse LLM verification
+        llm_score = 5
         if result["success"]:
             content = result["content"]
             if "SCORE:" in content:
                 try:
-                    score = int(content.split("SCORE:")[1].split()[0])
+                    llm_score = int(content.split("SCORE:")[1].split()[0])
                 except:
                     pass
             
-            if "VERIFIED: YES" in content or score >= 7:
-                verified = True
+            if "RELEVANT: NO" in content:
+                issues.append("Answer not relevant to question")
+                verified = False
             
             if "ISSUES:" in content:
-                issues = [content.split("ISSUES:")[1].strip()]
+                llm_issues = content.split("ISSUES:")[1].strip()
+                if llm_issues and llm_issues not in ["None", "none", "N/A"]:
+                    issues.append(llm_issues)
+        
+        # Combine scores (citation check weighted more heavily)
+        if self.citation_verification_enabled and verified:
+            # Citations passed, incorporate LLM relevance check
+            if llm_score < 6:
+                verified = False
+                score = min(score, llm_score)
         
         return {
             "success": result["success"],
@@ -363,7 +524,8 @@ class Pipeline:
             "issues": issues,
             "latency": latency,
             "tokens": result["usage"]["total_tokens"],
-            "raw_response": result.get("content", "")
+            "raw_response": result.get("content", ""),
+            "citations_checked": self.citation_verification_enabled
         }
     
     def _retry_generation(self, query: str, context: List[Dict], 
@@ -401,7 +563,7 @@ class Pipeline:
         }
     
     def get_stats(self) -> Dict:
-        """Get pipeline statistics."""
+        """Get pipeline statistics with correctness features."""
         import numpy as np
         
         stats = {
@@ -409,10 +571,24 @@ class Pipeline:
             "successful_queries": self.successful_queries,
             "failed_queries": self.failed_queries,
             "budget_refusals": self.budget_refusals,
+            "evidence_gate_refusals": self.evidence_gate_refusals,
+            "citation_failures": self.citation_failures,
             "retry_count": self.retry_count,
             "success_rate": self.successful_queries / self.total_queries if self.total_queries > 0 else 0,
             "model_config": self.model_config,  # Track which models used
+            "features": {
+                "evidence_gate_enabled": self.evidence_gate_enabled,
+                "citation_verification_enabled": self.citation_verification_enabled
+            }
         }
+        
+        # Add evidence gate stats
+        if self.evidence_gate_enabled:
+            stats["evidence_gate_stats"] = self.evidence_gate.get_stats()
+        
+        # Add citation stats
+        if self.citation_verification_enabled:
+            stats["citation_stats"] = self.citation_extractor.get_stats()
         
         # Stage timing statistics
         for stage, timings in self.stage_timings.items():

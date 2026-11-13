@@ -10,6 +10,8 @@ from .standin_service import StandinGroqService
 from .test_questions import TEST_QUESTIONS, evaluate_answer_quality
 from .load_tester import LoadTester, LoadScenario
 from .measure_groq import GroqMeasurement
+from .citations import CitationExtractor
+from .evidence_gate import EvidenceGate
 
 __all__ = [
     'PaperFetcher',
@@ -26,4 +28,6 @@ __all__ = [
     'LoadTester',
     'LoadScenario',
     'GroqMeasurement',
+    'CitationExtractor',
+    'EvidenceGate',
 ]
