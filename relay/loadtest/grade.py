@@ -6,22 +6,31 @@ from relay.loadtest.questions import EvalQuestion
 from relay.pipeline.types import AnswerGrade, PipelineResult
 
 
+def _is_capacity_refuse(text: str) -> bool:
+    return (
+        "try later" in text
+        or "try again later" in text
+        or "budget/capacity" in text
+        or "budget is tight" in text and "extractive answer" in text
+    )
+
+
 def grade_result(q: EvalQuestion, result: PipelineResult) -> AnswerGrade:
     text = (result.answer_text or "").lower()
-    refused = result.refused or "the papers do not say" in text or "try later" in text or "try again later" in text
+    capacity = _is_capacity_refuse(text)
+    refused = result.refused or "the papers do not say" in text or capacity
 
     if q.expect == "unanswerable":
-        if refused and "try later" not in text:
-            return AnswerGrade.REFUSED_CORRECTLY
-        if refused and "try later" in text:
-            # capacity refuse — not a quality judgment about the library
+        if capacity:
             return AnswerGrade.UNGRADED
-        return AnswerGrade.REFUSED_WRONGLY if not refused else AnswerGrade.REFUSED_CORRECTLY
+        if refused:
+            return AnswerGrade.REFUSED_CORRECTLY
+        return AnswerGrade.REFUSED_WRONGLY
 
     # answerable
-    if refused and "try later" in text:
+    if capacity and result.refused and "extractive answer" not in text:
         return AnswerGrade.UNGRADED
-    if refused:
+    if refused and "extractive answer" not in text:
         return AnswerGrade.REFUSED_WRONGLY
     # crude: must have a citation-looking token or extractive quote marker
     if "::c" in text or "extractive answer" in text or "[" in text:

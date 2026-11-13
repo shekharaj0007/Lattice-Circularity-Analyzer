@@ -10,13 +10,13 @@ from relay.config import settings
 from relay.models.base import StreamResult
 
 SYSTEM = """You classify questions for a library of exactly three papers:
-1) Attention Is All You Need (arXiv 1706.03762v7)
-2) Moshi speech-text foundation model (arXiv 2410.00037v1)
-3) Dynamic Chunking for hierarchical sequence modeling (arXiv 2507.07955v2)
+1) Attention Is All You Need (arXiv 1706.03762v7) — Transformers, attention, training details
+2) Moshi (arXiv 2410.00037v1) — speech-text foundation model, real-time / full-duplex dialogue, audio+text modalities
+3) Dynamic Chunking (arXiv 2507.07955v2) — hierarchical sequence modeling, learned chunk boundaries
 
 Reply with JSON only: {"answerable": true|false, "reason": "..."}.
-answerable=true only if the papers could plausibly contain the answer.
-If the question needs outside knowledge, set answerable=false."""
+answerable=true if ANY of these papers could plausibly contain the answer (including architecture, training, modalities, duplex/real-time claims in Moshi).
+answerable=false only for outside knowledge (prices, restaurants, post-paper events, other papers' citations not claimed here)."""
 
 
 def classify(client: Any, question: str) -> tuple[bool, str, StreamResult]:

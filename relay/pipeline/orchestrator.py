@@ -17,6 +17,7 @@ from relay.pipeline.classify import classify
 from relay.pipeline.draft import draft
 from relay.pipeline.extractive import extractive_answer, try_later_message
 from relay.pipeline.rewrite import rewrite
+from relay.pipeline.token_channel import TokenChannel
 from relay.pipeline.types import (
     AnswerGrade,
     LadderLevel,
@@ -26,11 +27,12 @@ from relay.pipeline.types import (
 from relay.pipeline.verify import local_citation_check, llm_verify
 
 
-def make_client(source: str) -> Any:
+def make_client(source: str, channel: TokenChannel) -> Any:
+    # Every model HTTP call goes through the same TokenChannel.
     if source == "real":
-        return GroqClient()
+        return GroqClient(token_channel=channel, use_token_channel=True)
     if source == "stand-in":
-        return StandinClient()
+        return StandinClient(token_channel=channel, use_token_channel=True)
     raise ValueError(f"unknown source: {source}")
 
 
@@ -40,12 +42,20 @@ class Orchestrator:
         budget: Optional[BudgetTracker] = None,
         source: str = "stand-in",
         retrieval_setting: Optional[str] = None,
+        token_channel: Optional[TokenChannel] = None,
     ) -> None:
-        self.budget = budget or BudgetTracker()
+        # Single channel for all provider calls; BudgetTracker stays for in-flight
+        # admission + 80% ladder, kept in sync by TokenChannel.release().
+        self.channel = token_channel or TokenChannel.shared()
+        self.budget = budget or self.channel.budget
+        if token_channel is None and budget is not None:
+            # Custom budget (load scenarios): bind a fresh channel to it.
+            self.channel = TokenChannel(budget=budget)
+            self.budget = budget
         self.admission = AdmissionController(self.budget)
         self.source = source
         self.retrieval_setting = retrieval_setting or settings.DEFAULT_RETRIEVAL_SETTING
-        self.client = make_client(source)
+        self.client = make_client(source, self.channel)
 
     def handle(
         self,
@@ -64,7 +74,11 @@ class Orchestrator:
         waiting_ms = 0.0
         retrying_ms = 0.0
         first_token_ms: Optional[float] = None
-        ladder = force_ladder if force_ladder is not None else self.budget.current_ladder()
+        ladder = (
+            force_ladder
+            if force_ladder is not None
+            else self.channel.ladder_level()
+        )
 
         def finish(
             *,
@@ -99,7 +113,9 @@ class Orchestrator:
                 waiting_ms=waiting_ms,
                 working_ms=working_ms,
                 retrying_ms=retrying_ms,
-                peak_queue_length=self.budget.peak_queue_length,
+                peak_queue_length=max(
+                    self.budget.peak_queue_length, self.channel.peak_queue_length
+                ),
             )
 
         # Ladder 5 before admission: honest try-later
@@ -121,17 +137,17 @@ class Orchestrator:
         try:
             # Re-read ladder after waiting (usage may have climbed)
             if force_ladder is None:
-                ladder = self.budget.current_ladder()
+                ladder = self.channel.ladder_level()
             if ladder >= LadderLevel.TRY_LATER:
                 msg = try_later_message("budget_exhausted_after_queue")
                 return finish(status=RequestStatus.OK, answer=msg, refused=True, reason="try_later")
 
             # --- classify (small model) ---
+            # Token accounting for this call is done inside the centralized channel.
             answerable, cls_reason, cls_res = classify(self.client, question)
             tokens_in += cls_res.tokens_in
             tokens_out += cls_res.tokens_out
             if cls_res.status == "rate_limited":
-                self.budget.record_rate_limit_hit()
                 return finish(
                     status=RequestStatus.RATE_LIMITED,
                     answer=try_later_message("rate_limited_on_classify"),
@@ -139,7 +155,6 @@ class Orchestrator:
                     reason="rate_limited",
                 )
             if not answerable:
-                self.budget.record_success(cls_res.tokens_in + cls_res.tokens_out)
                 ans = (
                     "The papers do not say. This question does not appear answerable "
                     f"from the three-paper library ({cls_reason})."
@@ -171,7 +186,6 @@ class Orchestrator:
                         seen.add(p.passage_id)
 
             if not passages:
-                self.budget.record_success(tokens_in + tokens_out)
                 return finish(
                     status=RequestStatus.OK,
                     answer="The papers do not say.",
@@ -182,7 +196,6 @@ class Orchestrator:
             # --- ladder 4: extractive only ---
             if ladder >= LadderLevel.EXTRACTIVE:
                 ans = extractive_answer(question, passages)
-                self.budget.record_success(tokens_in + tokens_out)
                 # first token ≈ when extractive text is ready (no model stream)
                 first_token_ms = (time.perf_counter() - t0) * 1000.0 - waiting_ms
                 return finish(
@@ -209,7 +222,6 @@ class Orchestrator:
                 if draft_res.status == "ok":
                     break
                 if draft_res.status == "rate_limited":
-                    self.budget.record_rate_limit_hit()
                     # Retrying 429 under overload often makes things worse — cap and bail.
                     if attempt >= settings.MAX_RETRIES:
                         return finish(
@@ -241,16 +253,13 @@ class Orchestrator:
                 tokens_out += rw.tokens_out
                 if rw.status == "ok" and rw.text.strip():
                     answer_text = rw.text.strip()
-                elif rw.status == "rate_limited":
-                    self.budget.record_rate_limit_hit()
-                    # Keep draft; do not fail the request for rewrite.
+                # rate-limited rewrite: keep draft; do not fail the request
 
             # --- verify: local always; LLM only if ladder == 0 ---
             local = local_citation_check(answer_text, passages)
             if not local.ok:
                 # Never guess — fall back to extractive rather than inventing fixes.
                 ans = extractive_answer(question, passages)
-                self.budget.record_success(tokens_in + tokens_out)
                 return finish(
                     status=RequestStatus.OK,
                     answer=ans,
@@ -265,7 +274,6 @@ class Orchestrator:
                     tokens_out += lv.llm_result.tokens_out
                 if not lv.ok:
                     ans = extractive_answer(question, passages)
-                    self.budget.record_success(tokens_in + tokens_out)
                     return finish(
                         status=RequestStatus.OK,
                         answer=ans,
@@ -273,7 +281,6 @@ class Orchestrator:
                         reason=f"llm_verify_failed:{lv.reason}",
                     )
 
-            self.budget.record_success(tokens_in + tokens_out)
             refused = "the papers do not say" in answer_text.lower()
             return finish(
                 status=RequestStatus.OK,

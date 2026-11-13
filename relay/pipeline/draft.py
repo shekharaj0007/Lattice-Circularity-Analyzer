@@ -34,4 +34,5 @@ def draft(client: Any, question: str, passages: list[Passage]) -> StreamResult:
         max_tokens=settings.DRAFT_MAX_TOKENS,
         temperature=0.1,
         stream=True,
+        reasoning_effort="medium",
     )

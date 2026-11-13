@@ -36,10 +36,14 @@ STANDIN_BASE = os.environ.get(
 # ---------------------------------------------------------------------------
 # Budget / rate limits (defaults; probe_limits.py overwrites measured values)
 # ---------------------------------------------------------------------------
-# Free-tier placeholders — replace with measured Table-1 values after probing.
+# Measured from Groq response headers on openai/gpt-oss-20b & 120b (2026-11-13):
+#   x-ratelimit-limit-tokens: 8000, reset ~1s  → TPM
+#   x-ratelimit-limit-requests: 1000, reset ~hours → RPD (per-model day window)
+# RPM / TPD / in-flight: not directly advertised in those headers; probe/refine.
 LIMIT_RPM = int(os.environ.get("RELAY_LIMIT_RPM", "30"))
-LIMIT_TPM = int(os.environ.get("RELAY_LIMIT_TPM", "6000"))
+LIMIT_TPM = int(os.environ.get("RELAY_LIMIT_TPM", "8000"))
 LIMIT_RPD = int(os.environ.get("RELAY_LIMIT_RPD", "1000"))
+# Measured from 429 on gpt-oss-120b: "tokens per day (TPD): Limit 200000"
 LIMIT_TPD = int(os.environ.get("RELAY_LIMIT_TPD", "200000"))
 LIMIT_IN_FLIGHT = int(os.environ.get("RELAY_LIMIT_IN_FLIGHT", "5"))
 
@@ -98,7 +102,8 @@ SHRUNK_RE_RANK = False
 # ---------------------------------------------------------------------------
 # Token caps (spend only where they buy correctness)
 # ---------------------------------------------------------------------------
-CLASSIFY_MAX_TOKENS = 64
-DRAFT_MAX_TOKENS = 700
+# gpt-oss models spend completion budget on reasoning; keep headroom for content.
+CLASSIFY_MAX_TOKENS = 256
+DRAFT_MAX_TOKENS = 900
 REWRITE_MAX_TOKENS = 700
-VERIFY_MAX_TOKENS = 128
+VERIFY_MAX_TOKENS = 256

@@ -47,8 +47,11 @@ class BudgetTracker:
         self.degrade_threshold = degrade_threshold
 
         self._lock = threading.Lock()
-        # (timestamp, tokens) for last 60s
+        # (timestamp, tokens) for request-per-minute window (60s)
         self._minute_events: Deque[Tuple[float, int]] = deque()
+        # Separate short token window: Groq x-ratelimit-reset-tokens is ~1s, not 60s.
+        self.tpm_window_s = 2.0
+        self._token_events: Deque[Tuple[float, int]] = deque()
         # day key YYYY-MM-DD -> (requests, tokens)
         self._day_key = self._today()
         self._day_requests = 0
@@ -65,6 +68,11 @@ class BudgetTracker:
         while self._minute_events and self._minute_events[0][0] < cutoff:
             self._minute_events.popleft()
 
+    def _prune_tokens(self, now: float) -> None:
+        cutoff = now - self.tpm_window_s
+        while self._token_events and self._token_events[0][0] < cutoff:
+            self._token_events.popleft()
+
     def _roll_day(self) -> None:
         key = self._today()
         if key != self._day_key:
@@ -74,9 +82,10 @@ class BudgetTracker:
 
     def _usage_ratio_unlocked(self, now: float) -> float:
         self._prune_minute(now)
+        self._prune_tokens(now)
         self._roll_day()
         rpm_used = len(self._minute_events) / max(1, self.rpm)
-        tpm_used = sum(t for _, t in self._minute_events) / max(1, self.tpm)
+        tpm_used = sum(t for _, t in self._token_events) / max(1, self.tpm)
         rpd_used = self._day_requests / max(1, self.rpd)
         tpd_used = self._day_tokens / max(1, self.tpd)
         return max(rpm_used, tpm_used, rpd_used, tpd_used)
@@ -105,13 +114,11 @@ class BudgetTracker:
     def snapshot(self) -> BudgetSnapshot:
         with self._lock:
             now = time.time()
-            self._prune_minute(now)
-            self._roll_day()
+            usage = self._usage_ratio_unlocked(now)
             rpm_u = len(self._minute_events) / max(1, self.rpm)
-            tpm_u = sum(t for _, t in self._minute_events) / max(1, self.tpm)
+            tpm_u = sum(t for _, t in self._token_events) / max(1, self.tpm)
             rpd_u = self._day_requests / max(1, self.rpd)
             tpd_u = self._day_tokens / max(1, self.tpd)
-            usage = max(rpm_u, tpm_u, rpd_u, tpd_u)
             return BudgetSnapshot(
                 rpm_used=rpm_u,
                 tpm_used=tpm_u,
@@ -146,16 +153,20 @@ class BudgetTracker:
         with self._lock:
             now = time.time()
             self._prune_minute(now)
+            self._prune_tokens(now)
             self._roll_day()
-            self._minute_events.append((now, max(0, tokens)))
+            toks = max(0, tokens)
+            self._minute_events.append((now, toks))
+            self._token_events.append((now, toks))
             self._day_requests += 1
-            self._day_tokens += max(0, tokens)
+            self._day_tokens += toks
 
     def record_rate_limit_hit(self) -> None:
         """Count a failed attempt against RPM/RPD so we climb the ladder."""
         with self._lock:
             now = time.time()
             self._prune_minute(now)
+            self._prune_tokens(now)
             self._roll_day()
             self._minute_events.append((now, 0))
             self._day_requests += 1
@@ -165,6 +176,7 @@ class BudgetTracker:
         with self._lock:
             now = time.time()
             self._minute_events.clear()
+            self._token_events.clear()
             n = int(round(ratio * self.rpm))
             for _ in range(max(0, n)):
                 self._minute_events.append((now, 0))

@@ -5,7 +5,7 @@ __pycache__/
 .joblib
 relay/papers/raw/*.pdf
 relay/data/index/*.jsonl
-relay/data/probes/*.json
 !relay/data/**/.gitkeep
 !relay/papers/raw/.gitkeep
-relay/data/results/results.csv
+# Keep measured probe summaries + results.csv for the assignment submission.
+# Ignore bulky raw index rebuilds only (PDFs already ignored above).

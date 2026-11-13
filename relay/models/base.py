@@ -16,6 +16,7 @@ class StreamResult:
     raw_error: str = ""
     status: str = "ok"  # ok | rate_limited | timeout | error
     chunks: list[str] = field(default_factory=list)
+    rate_limit_headers: dict[str, str] = field(default_factory=dict)
 
 
 class ModelClient(Protocol):
