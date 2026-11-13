@@ -109,9 +109,12 @@ Measures real API characteristics:
 
 ### Step 5: Quality Testing
 
-Tests answer quality on 15+ questions:
-- Covers all 3 papers
-- Multiple question types (factual, conceptual, comparative, procedural)
+Tests answer quality on 28 questions:
+- Covers all 3 papers (11 transformer, 7 Moshi, 5 dynamic chunking, 5 cross-paper)
+- Multiple question types (9 factual, 10 conceptual, 6 comparative, 3 procedural)
+- Includes edge cases to test refusal quality (cost data, GPT-4 comparisons)
+- Detail questions (BLEU scores, latency requirements, model dimensions)
+- Conceptual depth questions (multi-head rationale, complexity analysis)
 - Evaluates topic coverage, verification status, answer length
 - Computes quality scores (0-1)
 

@@ -182,12 +182,14 @@ Query → Intent → Retrieval → Generation → Verification → (Retry?) → 
 
 ## Test Questions
 
-- **18 questions** across 3 papers
-- **4 types**: FACTUAL, CONCEPTUAL, COMPARATIVE, PROCEDURAL
+- **28 questions** across 3 papers
+- **4 types**: 9 FACTUAL, 10 CONCEPTUAL, 6 COMPARATIVE, 3 PROCEDURAL
 - **Papers**: 
-  1. Attention Is All You Need
-  2. Moshi (speech-text)
-  3. Dynamic Chunking
+  1. Attention Is All You Need (11 questions)
+  2. Moshi (speech-text) (7 questions)
+  3. Dynamic Chunking (5 questions)
+  4. Cross-paper (5 questions)
+- **Coverage**: Detail questions, conceptual depth, edge cases, cross-paper comparisons
 
 ## Quick Stats
 
