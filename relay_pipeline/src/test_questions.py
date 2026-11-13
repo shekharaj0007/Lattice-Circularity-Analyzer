@@ -135,6 +135,86 @@ TEST_QUESTIONS = [
         "type": "CONCEPTUAL",
         "expected_topics": ["temporal", "sequential", "information", "models"]
     },
+    
+    # Detail questions - specific architectural/numerical details
+    {
+        "id": 19,
+        "question": "What is the dimensionality of the model in the transformer architecture?",
+        "paper": "Attention Is All You Need",
+        "type": "FACTUAL",
+        "expected_topics": ["dimension", "model", "512", "embedding", "hidden"]
+    },
+    {
+        "id": 20,
+        "question": "What are the specific BLEU scores achieved by the transformer on WMT translation tasks?",
+        "paper": "Attention Is All You Need",
+        "type": "FACTUAL",
+        "expected_topics": ["BLEU", "score", "WMT", "translation", "performance"]
+    },
+    {
+        "id": 21,
+        "question": "What is the latency requirement for Moshi to enable real-time dialogue?",
+        "paper": "Moshi",
+        "type": "FACTUAL",
+        "expected_topics": ["latency", "real-time", "milliseconds", "response", "time"]
+    },
+    
+    # Conceptual depth questions
+    {
+        "id": 22,
+        "question": "Why does the transformer use multiple attention heads instead of a single large attention head?",
+        "paper": "Attention Is All You Need",
+        "type": "CONCEPTUAL",
+        "expected_topics": ["multi-head", "attention", "subspaces", "representation", "diversity"]
+    },
+    {
+        "id": 23,
+        "question": "What is the computational complexity of self-attention and why is it significant for long sequences?",
+        "paper": "Attention Is All You Need",
+        "type": "CONCEPTUAL",
+        "expected_topics": ["complexity", "quadratic", "sequence", "length", "computational"]
+    },
+    
+    # Cross-paper comparative questions
+    {
+        "id": 24,
+        "question": "How could dynamic chunking techniques be applied to improve transformer attention mechanisms?",
+        "paper": "Multiple",
+        "type": "COMPARATIVE",
+        "expected_topics": ["dynamic", "chunking", "attention", "transformer", "efficiency"]
+    },
+    {
+        "id": 25,
+        "question": "Compare the sequence modeling approach in transformers versus the hierarchical approach in dynamic chunking.",
+        "paper": "Multiple",
+        "type": "COMPARATIVE",
+        "expected_topics": ["transformer", "hierarchical", "sequence", "modeling", "comparison"]
+    },
+    
+    # Edge case questions (should trigger appropriate handling/refusal)
+    {
+        "id": 26,
+        "question": "What was the total computational cost in dollars to train the original transformer model?",
+        "paper": "Attention Is All You Need",
+        "type": "FACTUAL",
+        "expected_topics": ["cost", "training", "computational", "resources"]
+    },
+    {
+        "id": 27,
+        "question": "How does Moshi compare to GPT-4 in terms of performance and architecture?",
+        "paper": "Moshi",
+        "type": "COMPARATIVE",
+        "expected_topics": ["comparison", "performance", "architecture", "limitations"]
+    },
+    
+    # Procedural depth question
+    {
+        "id": 28,
+        "question": "How would you implement the scaled dot-product attention mechanism described in the transformer paper?",
+        "paper": "Attention Is All You Need",
+        "type": "PROCEDURAL",
+        "expected_topics": ["scaled", "dot-product", "attention", "implementation", "queries", "keys", "values"]
+    },
 ]
 
 
