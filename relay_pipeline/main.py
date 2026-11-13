@@ -131,8 +131,23 @@ def step5_test_answer_quality(chunks, embedding_engine, measurements):
         print("⚠ GROQ_API_KEY not set - skipping quality tests")
         return None
     
-    # Create pipeline
-    groq_client = InstrumentedGroqClient()
+    # Create pipeline with strategic model sizing
+    # Default/fallback client
+    groq_client = InstrumentedGroqClient(
+        model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    )
+    
+    # Stage-specific clients for optimal cost/quality
+    intent_client = InstrumentedGroqClient(
+        model=os.getenv("GROQ_INTENT_MODEL", "llama-3.2-3b-preview")
+    )
+    generation_client = InstrumentedGroqClient(
+        model=os.getenv("GROQ_GENERATION_MODEL", "llama-3.1-70b-versatile")
+    )
+    verification_client = InstrumentedGroqClient(
+        model=os.getenv("GROQ_VERIFICATION_MODEL", "gemma2-9b-it")
+    )
+    
     rate_limiter = RateLimiter(rpm_limit=30, tpm_limit=14400)
     budget_tracker = TokenBudgetTracker(daily_token_limit=14400, budget_threshold=0.8)
     
@@ -144,8 +159,16 @@ def step5_test_answer_quality(chunks, embedding_engine, measurements):
         chunks=chunks,
         top_k=5,
         rerank=False,
-        max_retries=1
+        max_retries=1,
+        intent_client=intent_client,
+        generation_client=generation_client,
+        verification_client=verification_client
     )
+    
+    print(f"\nModel Configuration:")
+    print(f"  Intent: {intent_client.model}")
+    print(f"  Generation: {generation_client.model}")
+    print(f"  Verification: {verification_client.model}")
     
     # Test on subset of questions
     test_questions = TEST_QUESTIONS[:15]
@@ -240,8 +263,24 @@ def step6_run_load_tests(chunks, embedding_engine, use_standin=False):
                 service.calibrate(calibration)
             
             groq_client = service
+            # For stand-in, use same client for all stages
+            intent_client = service
+            generation_client = service
+            verification_client = service
         else:
-            groq_client = InstrumentedGroqClient()
+            # Strategic model sizing for real API
+            groq_client = InstrumentedGroqClient(
+                model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+            )
+            intent_client = InstrumentedGroqClient(
+                model=os.getenv("GROQ_INTENT_MODEL", "llama-3.2-3b-preview")
+            )
+            generation_client = InstrumentedGroqClient(
+                model=os.getenv("GROQ_GENERATION_MODEL", "llama-3.1-70b-versatile")
+            )
+            verification_client = InstrumentedGroqClient(
+                model=os.getenv("GROQ_VERIFICATION_MODEL", "gemma2-9b-it")
+            )
         
         rate_limiter = RateLimiter(rpm_limit=30, tpm_limit=14400)
         budget_tracker = TokenBudgetTracker(daily_token_limit=14400, budget_threshold=0.8)
@@ -254,7 +293,10 @@ def step6_run_load_tests(chunks, embedding_engine, use_standin=False):
             chunks=chunks,
             top_k=5,
             rerank=False,
-            max_retries=1
+            max_retries=1,
+            intent_client=intent_client,
+            generation_client=generation_client,
+            verification_client=verification_client
         )
     
     # Run load tests

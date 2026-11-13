@@ -307,8 +307,13 @@ scenario = {
 # Required
 GROQ_API_KEY=your_key_here
 
+# Strategic Model Sizing (optimal cost/quality)
+GROQ_INTENT_MODEL=llama-3.2-3b-preview       # Small/fast for intent
+GROQ_GENERATION_MODEL=llama-3.1-70b-versatile # Large for generation
+GROQ_VERIFICATION_MODEL=gemma2-9b-it          # Small/fast for verification
+
 # Optional (defaults shown)
-GROQ_MODEL=llama-3.1-8b-instant
+GROQ_MODEL=llama-3.1-8b-instant  # Fallback model
 GROQ_RPM_LIMIT=30
 GROQ_TPM_LIMIT=14400
 GROQ_DAILY_TOKEN_LIMIT=14400
@@ -316,6 +321,15 @@ BUDGET_THRESHOLD=0.8
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 MAX_RETRIES=1
 ```
+
+## Model Selection Strategy
+
+**Why different models?**
+- **Intent/Verification**: Simple tasks → small/fast models save tokens
+- **Generation**: Hard task → large models ensure quality
+- **Retrieval**: Local embeddings → zero API cost
+
+**Cost savings**: ~60% lower token usage vs. using large model for everything
 
 ---
 

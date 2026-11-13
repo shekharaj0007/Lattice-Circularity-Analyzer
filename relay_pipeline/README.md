@@ -11,6 +11,10 @@ A complete RAG (Retrieval-Augmented Generation) pipeline implementation with com
 4. **Verification** - Model-based quality verification with retry loop
 
 **Key Features:**
+- **Strategic Model Sizing**: Different models for different stages
+  - Small/fast models for simple tasks (intent, verification)
+  - Large/capable models for generation (where quality matters)
+  - Optimal cost/quality tradeoff
 - Centralized rate limiting with token budget tracking
 - Refuses requests at 80% of daily budget
 - Real Groq API integration with detailed instrumentation
@@ -160,6 +164,93 @@ The CSV files contain per-request data:
 - `tokens_used` - Total tokens consumed
 - `retry_needed` - Whether retry loop was triggered
 - `error` - Error message if failed
+
+## Strategic Model Sizing
+
+The pipeline uses **different models for different stages** to optimize cost and quality:
+
+### Model Selection Strategy
+
+**Small/Fast Models** (intent classification, verification):
+- `llama-3.2-3b-preview` - Intent classification
+- `gemma2-9b-it` - Verification
+- **Why**: Simple tasks (categorization, checking) don't need large models
+- **Benefit**: Save tokens on 50% of API calls
+
+**Large/Capable Models** (generation):
+- `llama-3.1-70b-versatile` - Answer generation
+- **Why**: Generation is the hard task that needs quality
+- **Benefit**: Spend tokens where it matters most
+
+**Local Models** (retrieval):
+- `all-MiniLM-L6-v2` - Embeddings
+- **Why**: Semantic search doesn't need API calls
+- **Benefit**: Zero API cost for retrieval
+
+### Configuration
+
+Set models in `.env`:
+
+```bash
+# Default/fallback
+GROQ_MODEL=llama-3.1-8b-instant
+
+# Small/fast for simple tasks
+GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_VERIFICATION_MODEL=gemma2-9b-it
+
+# Large/capable for generation
+GROQ_GENERATION_MODEL=llama-3.1-70b-versatile
+```
+
+### Alternative Models
+
+**Small/Fast Options:**
+- `llama-3.2-1b-preview` - Fastest, minimal quality
+- `llama-3.2-3b-preview` - Fast, good quality (recommended)
+- `gemma-7b-it` - Balanced
+- `gemma2-9b-it` - Better quality (recommended)
+
+**Large/Capable Options:**
+- `llama-3.1-70b-versatile` - High quality (recommended)
+- `llama-3.3-70b-versatile` - Latest, best quality
+- `mixtral-8x7b-32768` - Long context support
+
+### Cost/Quality Tradeoff
+
+**Without strategic sizing** (all stages use llama-3.1-70b):
+- High quality across all stages
+- ~3x token cost
+- Slower (larger model latency)
+
+**With strategic sizing** (mixed models):
+- Same generation quality
+- ~60% lower token cost (small models for 2/3 stages)
+- Faster (small models for simple tasks)
+- Better budget utilization
+
+### Testing Different Combinations
+
+Experiment with model combinations:
+
+```bash
+# Conservative: all small models
+GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_GENERATION_MODEL=llama-3.1-70b-versatile  # still use large for gen
+GROQ_VERIFICATION_MODEL=llama-3.2-3b-preview
+
+# Balanced: mixed sizes (recommended)
+GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_GENERATION_MODEL=llama-3.1-70b-versatile
+GROQ_VERIFICATION_MODEL=gemma2-9b-it
+
+# Aggressive: maximum quality
+GROQ_INTENT_MODEL=gemma2-9b-it
+GROQ_GENERATION_MODEL=llama-3.3-70b-versatile
+GROQ_VERIFICATION_MODEL=gemma2-9b-it
+```
+
+Compare results in `quality_test_results.json` to find optimal balance.
 
 ## Architecture Components
 

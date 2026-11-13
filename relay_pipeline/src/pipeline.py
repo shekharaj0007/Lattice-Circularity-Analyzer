@@ -18,8 +18,34 @@ class Pipeline:
                  chunks: List[Dict],
                  top_k: int = 5,
                  rerank: bool = False,
-                 max_retries: int = 1):
+                 max_retries: int = 1,
+                 intent_client: Optional[InstrumentedGroqClient] = None,
+                 generation_client: Optional[InstrumentedGroqClient] = None,
+                 verification_client: Optional[InstrumentedGroqClient] = None):
+        """
+        Initialize pipeline with strategic model sizing.
+        
+        Args:
+            groq_client: Default client (used as fallback)
+            embedding_engine: Local embeddings
+            rate_limiter: Rate limiting
+            budget_tracker: Token budget tracking
+            chunks: Document chunks
+            top_k: Number of chunks to retrieve
+            rerank: Enable re-ranking
+            max_retries: Max retry attempts
+            intent_client: Small/fast model for intent classification (optional)
+            generation_client: Large/capable model for generation (optional)
+            verification_client: Small/fast model for verification (optional)
+        """
+        # Default client (fallback)
         self.groq = groq_client
+        
+        # Stage-specific clients (use dedicated or fall back to default)
+        self.intent_client = intent_client or groq_client
+        self.generation_client = generation_client or groq_client
+        self.verification_client = verification_client or groq_client
+        
         self.embeddings = embedding_engine
         self.rate_limiter = rate_limiter
         self.budget_tracker = budget_tracker
@@ -27,6 +53,13 @@ class Pipeline:
         self.top_k = top_k
         self.rerank = rerank
         self.max_retries = max_retries
+        
+        # Track which models are used for each stage
+        self.model_config = {
+            "intent": self.intent_client.model,
+            "generation": self.generation_client.model,
+            "verification": self.verification_client.model
+        }
         
         # Pipeline metrics
         self.total_queries = 0
@@ -198,7 +231,8 @@ class Pipeline:
             {"role": "user", "content": f"Query: {query}\n\nIntent:"}
         ]
         
-        result = self.groq.chat_completion(messages, max_tokens=50, temperature=0.3)
+        # Use small/fast model for intent classification
+        result = self.intent_client.chat_completion(messages, max_tokens=50, temperature=0.3)
         
         latency = time.time() - start_time
         self.stage_timings["intent"].append(latency)
@@ -270,7 +304,8 @@ class Pipeline:
             {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}\n\nAnswer:"}
         ]
         
-        result = self.groq.chat_completion(messages, max_tokens=400, temperature=0.7)
+        # Use large/capable model for generation (the hard task)
+        result = self.generation_client.chat_completion(messages, max_tokens=400, temperature=0.7)
         
         latency = time.time() - start_time
         self.stage_timings["generation"].append(latency)
@@ -296,7 +331,8 @@ class Pipeline:
             {"role": "user", "content": f"Question: {query}\n\nAnswer: {answer}\n\nVerification:"}
         ]
         
-        result = self.groq.chat_completion(messages, max_tokens=200, temperature=0.3)
+        # Use small/fast model for verification (simple checking task)
+        result = self.verification_client.chat_completion(messages, max_tokens=200, temperature=0.3)
         
         latency = time.time() - start_time
         self.stage_timings["verification"].append(latency)
@@ -352,7 +388,8 @@ class Pipeline:
             {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}\n\nPrevious Answer: {previous_answer}\n\nIssues: {issues_str}\n\nImproved Answer:"}
         ]
         
-        result = self.groq.chat_completion(messages, max_tokens=400, temperature=0.7)
+        # Use large/capable model for retry generation (still a hard task)
+        result = self.generation_client.chat_completion(messages, max_tokens=400, temperature=0.7)
         
         latency = time.time() - start_time
         
@@ -374,6 +411,7 @@ class Pipeline:
             "budget_refusals": self.budget_refusals,
             "retry_count": self.retry_count,
             "success_rate": self.successful_queries / self.total_queries if self.total_queries > 0 else 0,
+            "model_config": self.model_config,  # Track which models used
         }
         
         # Stage timing statistics
