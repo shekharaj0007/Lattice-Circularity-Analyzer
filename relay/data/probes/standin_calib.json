@@ -1,0 +1,17 @@
+{
+  "ttft_p50_ms": 236.29865599991717,
+  "ttft_p95_ms": 248.07122199990772,
+  "total_p50_ms": 285.32448799990107,
+  "total_p95_ms": 318.6699169998519,
+  "rpm": 30,
+  "tpm": 8000,
+  "rpd": 1000,
+  "fail_rate": 0.01,
+  "load_slowdown_per_inflight": 0.08,
+  "least_like_real": [
+    "multi-tenant scheduler / noisy neighbors",
+    "exact 429 error schema and recovery timers",
+    "true tokenizer-based TPM accounting"
+  ],
+  "source_probe": "/agent/repos/Lattice-Circularity-Analyzer/relay/data/probes/groq_probe.json"
+}

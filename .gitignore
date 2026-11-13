@@ -1,5 +1,11 @@
 .env
 __pycache__/
 *.pyc
-models/
+/models/
 .joblib
+relay/papers/raw/*.pdf
+relay/data/index/*.jsonl
+!relay/data/**/.gitkeep
+!relay/papers/raw/.gitkeep
+# Keep measured probe summaries + results.csv for the assignment submission.
+# Ignore bulky raw index rebuilds only (PDFs already ignored above).
