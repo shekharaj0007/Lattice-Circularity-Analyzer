@@ -1,5 +1,11 @@
 .env
 __pycache__/
 *.pyc
-models/
+/models/
 .joblib
+relay/papers/raw/*.pdf
+relay/data/index/*.jsonl
+relay/data/probes/*.json
+!relay/data/**/.gitkeep
+!relay/papers/raw/.gitkeep
+relay/data/results/results.csv
