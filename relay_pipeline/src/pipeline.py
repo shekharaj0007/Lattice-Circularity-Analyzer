@@ -373,12 +373,17 @@ class Pipeline:
         """Stage 3: Generate answer from context with prompt size caps."""
         start_time = time.time()
         
-        # Build context string with size cap
+        # Build context string with size cap, including paper metadata
         context_parts = []
         context_char_count = 0
+        papers_in_context = set()
         
         for i, chunk in enumerate(context[:5]):  # Max 5 chunks
             chunk_text = chunk['text'][:500]  # Max 500 chars per chunk
+            
+            # Track which papers are present
+            paper_name = chunk.get('metadata', {}).get('paper', 'Unknown')
+            papers_in_context.add(paper_name)
             
             # Check if adding this chunk would exceed limit
             if context_char_count + len(chunk_text) > self.MAX_CONTEXT_CHARS:
@@ -386,16 +391,30 @@ class Pipeline:
                 remaining = self.MAX_CONTEXT_CHARS - context_char_count
                 if remaining > 100:  # Only add if substantial space left
                     chunk_text = chunk_text[:remaining]
-                    context_parts.append(f"[Chunk c{chunk['id']}]: {chunk_text}...")
+                    context_parts.append(f"[Chunk c{chunk['id']} from {paper_name}]: {chunk_text}...")
                 break
             
-            context_parts.append(f"[Chunk c{chunk['id']}]: {chunk_text}")
+            context_parts.append(f"[Chunk c{chunk['id']} from {paper_name}]: {chunk_text}")
             context_char_count += len(chunk_text)
         
         context_str = "\n\n".join(context_parts)
         
+        # Build paper version mapping for prompt
+        paper_versions = {
+            "Attention Is All You Need": "v7",
+            "Moshi": "v1",
+            "Dynamic Chunking": "v2"
+        }
+        
+        # List papers in context with versions
+        papers_info = []
+        for paper in papers_in_context:
+            version = paper_versions.get(paper, "v1")
+            papers_info.append(f'- "{paper}" {version}')
+        papers_list = "\n".join(papers_info) if papers_info else '- "Attention Is All You Need" v7'
+        
         # Estimate tokens (rough: 1 token ≈ 4 chars)
-        estimated_prompt_tokens = len(context_str) // 4 + len(query) // 4 + 100
+        estimated_prompt_tokens = len(context_str) // 4 + len(query) // 4 + 150
         estimated_tokens = estimated_prompt_tokens + 400  # + max_tokens
         
         # Wait for rate limit
@@ -403,13 +422,26 @@ class Pipeline:
         if wait_time > 0:
             time.sleep(wait_time)
         
-        system_prompt = """You are a helpful assistant. Answer based ONLY on the provided context.
-Include citations in format: [Paper vN, p.PAGE, chunk cID]
-Example: The transformer uses attention [Attention Is All You Need v7, p.3, chunk c1].
-If context doesn't answer the question, say so."""
+        system_prompt = f"""You are a helpful assistant. Answer based ONLY on the provided context.
+
+CRITICAL: You MUST cite every claim using this EXACT format:
+[Paper Name vN, p.PAGE, chunk cID]
+
+Papers in context:
+{papers_list}
+
+Example answer:
+"The Transformer encoder has 6 layers [Attention Is All You Need v7, p.3, chunk c1] and uses multi-head attention [Attention Is All You Need v7, p.4, chunk c2]."
+
+Rules:
+1. Use EXACT paper names and versions listed above
+2. Use chunk IDs from context (c1, c2, c3, etc.)
+3. Cite EVERY factual claim
+4. If context doesn't answer the question, say "The provided context doesn't answer this question."
+"""
         
         # Enforce prompt size cap
-        user_content = f"Context:\n{context_str}\n\nQuestion: {query}\n\nAnswer:"
+        user_content = f"Context:\n{context_str}\n\nQuestion: {query}\n\nProvide a detailed answer with citations:"
         if len(system_prompt) + len(user_content) > self.MAX_PROMPT_TOKENS * 4:  # Approximate
             # Truncate context further
             max_context_len = self.MAX_PROMPT_TOKENS * 4 - len(system_prompt) - len(query) - 200
@@ -427,9 +459,20 @@ If context doesn't answer the question, say so."""
         latency = time.time() - start_time
         self.stage_timings["generation"].append(latency)
         
+        answer = result.get("content", "")
+        
+        # Debug: Log raw output for citation debugging
+        if os.getenv("DEBUG_CITATIONS", "false").lower() == "true":
+            print(f"\n[DEBUG] Generation output ({len(answer)} chars):")
+            print(f"{answer[:200]}..." if len(answer) > 200 else answer)
+            citations = self.citation_extractor.extract_citations(answer)
+            print(f"[DEBUG] Citations found: {len(citations)}")
+            if not citations and len(answer) > 0:
+                print(f"[DEBUG] WARNING: No citations in non-empty answer")
+        
         return {
             "success": result["success"],
-            "answer": result.get("content", ""),
+            "answer": answer,
             "latency": latency,
             "tokens": result["usage"]["total_tokens"]
         }
@@ -528,26 +571,62 @@ If context doesn't answer the question, say so."""
             "citations_checked": self.citation_verification_enabled
         }
     
-    def _retry_generation(self, query: str, context: List[Dict], 
+    def _retry_generation(self, query: str, context: List[Dict],
                           previous_answer: str, issues: List[str]) -> Dict:
         """Retry generation with feedback."""
         start_time = time.time()
         
-        context_str = "\n\n".join([
-            f"[Source {i+1}]: {chunk['text'][:500]}" 
-            for i, chunk in enumerate(context[:5])
-        ])
+        # Build context with paper metadata
+        context_parts = []
+        papers_in_context = set()
+        for chunk in context[:5]:
+            paper_name = chunk.get('metadata', {}).get('paper', 'Unknown')
+            papers_in_context.add(paper_name)
+            context_parts.append(f"[Chunk c{chunk['id']} from {paper_name}]: {chunk['text'][:500]}")
+        context_str = "\n\n".join(context_parts)
         
-        issues_str = "\n".join(issues) if issues else "The answer needs improvement."
+        # Build paper version mapping
+        paper_versions = {
+            "Attention Is All You Need": "v7",
+            "Moshi": "v1",
+            "Dynamic Chunking": "v2"
+        }
+        
+        papers_info = []
+        for paper in papers_in_context:
+            version = paper_versions.get(paper, "v1")
+            papers_info.append(f'- "{paper}" {version}')
+        papers_list = "\n".join(papers_info) if papers_info else '- "Attention Is All You Need" v7'
+        
+        issues_str = "\n".join([f"- {issue}" for issue in issues]) if issues else "- The answer needs improvement."
         
         # Wait for rate limit
         wait_time = self.rate_limiter.acquire(estimated_tokens=400)
         if wait_time > 0:
             time.sleep(wait_time)
         
+        system_prompt = f"""You are a helpful assistant. The previous answer had issues. Generate a better answer.
+
+CRITICAL: You MUST cite every claim using this EXACT format:
+[Paper Name vN, p.PAGE, chunk cID]
+
+Papers in context:
+{papers_list}
+
+Example: The encoder has 6 layers [Attention Is All You Need v7, p.3, chunk c1].
+
+Previous issues to fix:
+{issues_str}
+
+Rules:
+1. Use EXACT paper names and versions listed above
+2. Use chunk IDs from context (c1, c2, etc.)
+3. Cite EVERY factual claim
+"""
+        
         messages = [
-            {"role": "system", "content": "You are a helpful assistant. The previous answer had issues. Provide an improved answer based on the context."},
-            {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}\n\nPrevious Answer: {previous_answer}\n\nIssues: {issues_str}\n\nImproved Answer:"}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}\n\nPrevious Answer (had issues): {previous_answer}\n\nProvide an improved answer with citations:"}
         ]
         
         # Use large/capable model for retry generation (still a hard task)
