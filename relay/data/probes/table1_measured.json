@@ -1,0 +1,44 @@
+{
+  "requests_per_minute": {
+    "value": "not directly advertised",
+    "how": "No distinct RPM header; burst behavior dominated by TPD/TPM",
+    "confidence": "low"
+  },
+  "tokens_per_minute": {
+    "value": 8000,
+    "how": "x-ratelimit-limit-tokens with ~1s reset",
+    "confidence": "high"
+  },
+  "requests_per_day": {
+    "value": 1000,
+    "how": "x-ratelimit-limit-requests with multi-hour reset (per model)",
+    "confidence": "high"
+  },
+  "tokens_per_day": {
+    "value": 200000,
+    "how": "From HTTP 429 body on openai/gpt-oss-120b: Limit 200000 TPD",
+    "confidence": "high"
+  },
+  "requests_in_flight_at_once": {
+    "value": "not measured",
+    "how": "Deferred",
+    "confidence": "low"
+  },
+  "what_it_returns_when_limit_hit": {
+    "value": "HTTP 429 JSON error type=tokens code=rate_limit_exceeded; message names TPD Limit 200000 and retry seconds",
+    "how": "Burst against gpt-oss-120b after heavy draft usage",
+    "confidence": "high",
+    "sample_body": {
+      "error": {
+        "message": "Rate limit reached for model `openai/gpt-oss-120b` ... on tokens per day (TPD): Limit 200000, Used 199904, Requested 106. Please try again in 4.32s.",
+        "type": "tokens",
+        "code": "rate_limit_exceeded"
+      }
+    }
+  },
+  "time_until_it_recovers": {
+    "value": "seconds for TPM (~1s header); TPD recovers next day / message gave 4.32s for tiny remainder",
+    "how": "headers + 429 message",
+    "confidence": "medium"
+  }
+}

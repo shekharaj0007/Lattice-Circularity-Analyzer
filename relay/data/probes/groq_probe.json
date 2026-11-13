@@ -1,0 +1,191 @@
+{
+  "models": [
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b"
+  ],
+  "rows": [
+    {
+      "i": 0,
+      "model": "openai/gpt-oss-20b",
+      "status": "ok",
+      "first_token_ms": 236.29865599991717,
+      "total_ms": 244.29307400009748,
+      "tokens_in": 83,
+      "tokens_out": 25,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "558",
+        "x-ratelimit-remaining-tokens": "7853",
+        "x-ratelimit-reset-requests": "10h36m28.8s",
+        "x-ratelimit-reset-tokens": "1.102s",
+        "x-request-id": "req_01m7a14cnxebmass247f9metsv"
+      },
+      "text_preview": "Hello, how can I help?",
+      "wall_s": 0.24453700399999434
+    },
+    {
+      "i": 1,
+      "model": "openai/gpt-oss-120b",
+      "status": "ok",
+      "first_token_ms": null,
+      "total_ms": 318.6699169998519,
+      "tokens_in": 83,
+      "tokens_out": 64,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "863",
+        "x-ratelimit-remaining-tokens": "7853",
+        "x-ratelimit-reset-requests": "3h17m16.8s",
+        "x-ratelimit-reset-tokens": "1.102s",
+        "x-request-id": "req_01m7a14dw0ea68bbnnn0r1qxhk"
+      },
+      "text_preview": "",
+      "wall_s": 0.31887598899993463
+    },
+    {
+      "i": 2,
+      "model": "openai/gpt-oss-20b",
+      "status": "ok",
+      "first_token_ms": 201.15024400001857,
+      "total_ms": 208.9054949999536,
+      "tokens_in": 83,
+      "tokens_out": 25,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "557",
+        "x-ratelimit-remaining-tokens": "7853",
+        "x-ratelimit-reset-requests": "10h37m55.2s",
+        "x-ratelimit-reset-tokens": "1.102s",
+        "x-request-id": "req_01m7a14f59egv8kbq3acw9b1jd"
+      },
+      "text_preview": "Hello, how can I help?",
+      "wall_s": 0.20909277400005521
+    },
+    {
+      "i": 3,
+      "model": "openai/gpt-oss-120b",
+      "status": "ok",
+      "first_token_ms": null,
+      "total_ms": 313.58860299997104,
+      "tokens_in": 83,
+      "tokens_out": 64,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "862",
+        "x-ratelimit-remaining-tokens": "7873",
+        "x-ratelimit-reset-requests": "3h18m43.2s",
+        "x-ratelimit-reset-tokens": "952ms",
+        "x-request-id": "req_01m7a14gb1ep3vd2bqfhwth1tj"
+      },
+      "text_preview": "",
+      "wall_s": 0.3137785359999725
+    },
+    {
+      "i": 4,
+      "model": "openai/gpt-oss-20b",
+      "status": "ok",
+      "first_token_ms": 248.07122199990772,
+      "total_ms": 257.0603729998311,
+      "tokens_in": 83,
+      "tokens_out": 25,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "556",
+        "x-ratelimit-remaining-tokens": "7853",
+        "x-ratelimit-reset-requests": "10h39m21.6s",
+        "x-ratelimit-reset-tokens": "1.102s",
+        "x-request-id": "req_01m7a14hm2e4mrwtydjw29by5x"
+      },
+      "text_preview": "Hello, how can I help?",
+      "wall_s": 0.25724766999996973
+    },
+    {
+      "i": 5,
+      "model": "openai/gpt-oss-120b",
+      "status": "ok",
+      "first_token_ms": null,
+      "total_ms": 317.4912439999389,
+      "tokens_in": 83,
+      "tokens_out": 64,
+      "error": "",
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "8000",
+        "x-ratelimit-remaining-requests": "861",
+        "x-ratelimit-remaining-tokens": "7853",
+        "x-ratelimit-reset-requests": "3h20m9.6s",
+        "x-ratelimit-reset-tokens": "1.102s",
+        "x-request-id": "req_01m7a14jv9ef29b500pahhtn9q"
+      },
+      "text_preview": "",
+      "wall_s": 0.31769884499999534
+    }
+  ],
+  "last_rate_limit_headers": {
+    "x-ratelimit-limit-requests": "1000",
+    "x-ratelimit-limit-tokens": "8000",
+    "x-ratelimit-remaining-requests": "861",
+    "x-ratelimit-remaining-tokens": "7853",
+    "x-ratelimit-reset-requests": "3h20m9.6s",
+    "x-ratelimit-reset-tokens": "1.102s",
+    "x-request-id": "req_01m7a14jv9ef29b500pahhtn9q"
+  },
+  "table1": {
+    "requests_per_minute": {
+      "value": 30,
+      "how": "Not present as a distinct header; placeholder until 429 probe. Token window resets ~1s suggests TPM is the tight minute limit.",
+      "confidence": "low"
+    },
+    "tokens_per_minute": {
+      "value": 8000,
+      "how": "x-ratelimit-limit-tokens + x-ratelimit-reset-tokens (~1s) on chat completions",
+      "confidence": "high"
+    },
+    "requests_per_day": {
+      "value": 1000,
+      "how": "x-ratelimit-limit-requests with multi-hour x-ratelimit-reset-requests",
+      "confidence": "high"
+    },
+    "tokens_per_day": {
+      "value": "not measured",
+      "how": "No TPD header observed on these responses",
+      "confidence": "low"
+    },
+    "requests_in_flight_at_once": {
+      "value": "not measured",
+      "how": "Requires concurrency probe; not in single-request headers",
+      "confidence": "low"
+    },
+    "what_it_returns_when_limit_hit": {
+      "value": "not measured this run (no 429 yet)",
+      "how": "Will capture HTTP status + body on first 429",
+      "confidence": "low"
+    },
+    "time_until_it_recovers": {
+      "value": "1.102s",
+      "how": "From x-ratelimit-reset-* headers when present",
+      "confidence": "medium"
+    }
+  },
+  "configured_limits": {
+    "rpm": 30,
+    "tpm": 8000,
+    "rpd": 1000,
+    "tpd": 500000,
+    "in_flight": 5
+  },
+  "notes": [
+    "Python urllib without a browser-like User-Agent got Cloudflare HTTP 403 error 1010; client now sends a Mozilla-compatible UA.",
+    "gpt-oss models use reasoning tokens; client sets reasoning_effort=low for small calls."
+  ]
+}
