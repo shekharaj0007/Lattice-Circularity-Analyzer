@@ -12,7 +12,7 @@ load_dotenv()
 class InstrumentedGroqClient:
     """Groq client with detailed instrumentation."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.1-8b-instant"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemma2-9b-it"):
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         if not self.api_key:
             raise ValueError("GROQ_API_KEY not set")

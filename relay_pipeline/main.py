@@ -134,12 +134,12 @@ def step5_test_answer_quality(chunks, embedding_engine, measurements):
     # Create pipeline with strategic model sizing
     # Default/fallback client
     groq_client = InstrumentedGroqClient(
-        model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+                model=os.getenv("GROQ_MODEL", "gemma2-9b-it")
     )
     
     # Stage-specific clients for optimal cost/quality
     intent_client = InstrumentedGroqClient(
-        model=os.getenv("GROQ_INTENT_MODEL", "llama-3.2-3b-preview")
+        model=os.getenv("GROQ_INTENT_MODEL", "gemma2-9b-it")
     )
     generation_client = InstrumentedGroqClient(
         model=os.getenv("GROQ_GENERATION_MODEL", "llama-3.1-70b-versatile")
@@ -270,10 +270,10 @@ def step6_run_load_tests(chunks, embedding_engine, use_standin=False):
         else:
             # Strategic model sizing for real API
             groq_client = InstrumentedGroqClient(
-                model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+                model=os.getenv("GROQ_MODEL", "gemma2-9b-it")
             )
             intent_client = InstrumentedGroqClient(
-                model=os.getenv("GROQ_INTENT_MODEL", "llama-3.2-3b-preview")
+                model=os.getenv("GROQ_INTENT_MODEL", "gemma2-9b-it")
             )
             generation_client = InstrumentedGroqClient(
                 model=os.getenv("GROQ_GENERATION_MODEL", "llama-3.1-70b-versatile")

@@ -172,8 +172,8 @@ The pipeline uses **different models for different stages** to optimize cost and
 ### Model Selection Strategy
 
 **Small/Fast Models** (intent classification, verification):
-- `llama-3.2-3b-preview` - Intent classification
-- `gemma2-9b-it` - Verification
+- `gemma2-9b-it` - Intent classification and verification
+- `gemma-7b-it` - Lighter alternative
 - **Why**: Simple tasks (categorization, checking) don't need large models
 - **Benefit**: Save tokens on 50% of API calls
 
@@ -193,22 +193,20 @@ Set models in `.env`:
 
 ```bash
 # Default/fallback
-GROQ_MODEL=llama-3.1-8b-instant
+GROQ_MODEL=gemma2-9b-it
 
 # Small/fast for simple tasks
-GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_INTENT_MODEL=gemma2-9b-it
 GROQ_VERIFICATION_MODEL=gemma2-9b-it
 
 # Large/capable for generation
 GROQ_GENERATION_MODEL=llama-3.1-70b-versatile
 ```
 
-### Alternative Models
+### Alternative Models (Groq Free Tier)
 
 **Small/Fast Options:**
-- `llama-3.2-1b-preview` - Fastest, minimal quality
-- `llama-3.2-3b-preview` - Fast, good quality (recommended)
-- `gemma-7b-it` - Balanced
+- `gemma-7b-it` - Balanced speed/quality
 - `gemma2-9b-it` - Better quality (recommended)
 
 **Large/Capable Options:**
@@ -235,12 +233,12 @@ Experiment with model combinations:
 
 ```bash
 # Conservative: all small models
-GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_INTENT_MODEL=gemma2-9b-it
 GROQ_GENERATION_MODEL=llama-3.1-70b-versatile  # still use large for gen
-GROQ_VERIFICATION_MODEL=llama-3.2-3b-preview
+GROQ_VERIFICATION_MODEL=gemma2-9b-it
 
 # Balanced: mixed sizes (recommended)
-GROQ_INTENT_MODEL=llama-3.2-3b-preview
+GROQ_INTENT_MODEL=gemma2-9b-it
 GROQ_GENERATION_MODEL=llama-3.1-70b-versatile
 GROQ_VERIFICATION_MODEL=gemma2-9b-it
 
